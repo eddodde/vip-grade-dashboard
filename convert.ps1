@@ -1,15 +1,8 @@
-# VIP grade-movement source xlsx -> data/*.csv
-# Source is NOT DRM (PK header). Read Value2 via Excel COM, write UTF-8(BOM) CSV via .NET.
-# NOTE: keep executable strings ASCII-only; PS5.1 may read this .ps1 as ANSI and mangle non-ASCII.
-# Tables are located by ASCII header anchors (no Korean sheet-name / Korean-token dependency).
-#
-# Outputs:
-#   raw_grade.csv     - RAW input (A1 = CURR_STD_YM)            [for MAU/DAU pillar + flexibility]
-#   monthly_grade.csv - per (YM, grade) movement table          [header c1=YM c2=GRADE]
-#   vip_vs_normal.csv - VIP vs normal group compare             [header c1=YM c2=GROUP]
-#   conversion.csv    - normal->VIP conversion & internal churn [header c1=YM, none of the others]
-#   vip_growth.csv    - VIP net / needed-new scenarios          [header c1=YM, a cell starts 'VIP_']
-#   move_matrix.csv   - from->to transition matrix              [header c1=YM c2=FROM_CD]
+# VIP 등급수불 원본 xlsx -> data/raw_grade.csv (RAW_입력 시트만)
+# 원본은 DRM-free(PK 헤더). Excel COM 으로 Value2 읽어 .NET 으로 UTF-8(BOM) CSV 작성.
+# 대시보드는 이 raw 1개 파일만 쓰고 나머지 지표는 앱(app.py)이 직접 계산한다.
+# NOTE: 실행 문자열은 ASCII-only 유지(PS5.1이 BOM없는 .ps1을 ANSI로 읽어 한글 깨짐).
+#       시트는 한글명이 아니라 A1=='CURR_STD_YM' 헤더로 탐지. -Src 는 호출 시 직접 전달 권장.
 param(
   [string]$Src = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\(제휴제외)VIP_등급수불_TEMPLATE_auto_v3_251215.xlsx"
 )
@@ -17,29 +10,36 @@ $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $outDir = Join-Path $here 'data'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+$outFile = Join-Path $outDir 'raw_grade.csv'
+
+$cols = @('CURR_STD_YM','GRAD_STATUS','GRAD_MOVEMENT','CURR_GRAD_GB',
+  'CURR_NLINE_MEM_GRAD_CD','CURR_NLINE_MEM_GRAD_NM','PREV_GRAD_GB',
+  'PREV_NLINE_MEM_GRAD_CD','PREV_NLINE_MEM_GRAD_NM','CUST_CNT','MAU','DAU')
 
 function Esc([object]$v){
   if($null -eq $v){ return '' }
   $s = [string]$v
   if($s -match '[",\r\n]'){ '"' + ($s -replace '"','""') + '"' } else { $s }
 }
-function WriteCsv([string]$file, [System.Text.StringBuilder]$sb){
-  $utf8bom = New-Object System.Text.UTF8Encoding($true)
-  [System.IO.File]::WriteAllText($file, $sb.ToString(), $utf8bom)
-}
-# Dump a table from a sheet's Value2 grid: header at row hr, ncols wide.
-# Emits header + every data row with a non-empty column-1 (skips internal/trailing blanks).
-# YM (col 1) forced to int-string so 202501 stays text, not 202,501 / 202501.0.
-function DumpTable($data, [int]$hr, [int]$ncols, [int]$rmax, [string]$file){
+
+$xl = New-Object -ComObject Excel.Application
+$xl.Visible = $false; $xl.DisplayAlerts = $false
+try {
+  $wb = $xl.Workbooks.Open($Src, 0, $true)
+  $ws = $null
+  foreach($s in $wb.Worksheets){
+    if([string]$s.Cells(1,1).Value2 -eq 'CURR_STD_YM'){ $ws = $s; break }
+  }
+  if($null -eq $ws){ throw "RAW sheet (A1=CURR_STD_YM) not found" }
+  $ur = $ws.UsedRange
+  $data = $ur.Value2
+  $rmax = $ur.Rows.Count
   $sb = New-Object System.Text.StringBuilder
-  # header
-  $h = for($j=1; $j -le $ncols; $j++){ Esc $data[$hr,$j] }
-  [void]$sb.AppendLine(($h -join ','))
+  [void]$sb.AppendLine($cols -join ',')
   $n = 0
-  for($i=$hr+1; $i -le $rmax; $i++){
-    $c1 = $data[$i,1]
-    if($null -eq $c1 -or [string]$c1 -eq ''){ continue }
-    $line = for($j=1; $j -le $ncols; $j++){
+  for($i=2; $i -le $rmax; $i++){
+    if($null -eq $data[$i,1]){ continue }
+    $line = for($j=1; $j -le 12; $j++){
       $v = $data[$i,$j]
       if($j -eq 1 -and ($v -is [double] -or $v -is [int])){ $v = [string][int]$v }
       Esc $v
@@ -47,40 +47,9 @@ function DumpTable($data, [int]$hr, [int]$ncols, [int]$rmax, [string]$file){
     [void]$sb.AppendLine(($line -join ','))
     $n++
   }
-  WriteCsv $file $sb
-  Write-Host ("WROTE {0} ({1} rows)" -f (Split-Path -Leaf $file), $n)
-}
-
-$xl = New-Object -ComObject Excel.Application
-$xl.Visible = $false; $xl.DisplayAlerts = $false
-try {
-  $wb = $xl.Workbooks.Open($Src, 0, $true)
-  foreach($ws in $wb.Worksheets){
-    $ur = $ws.UsedRange
-    $data = $ur.Value2
-    $rmax = $ur.Rows.Count; $cmax = $ur.Columns.Count
-    if($null -eq $data){ continue }
-    # absolute-position grid: Value2 is 1-based but indexed within UsedRange.
-    for($r=1; $r -le [Math]::Min($rmax,60); $r++){
-      $c1 = [string]$data[$r,1]
-      if($c1 -eq 'CURR_STD_YM'){
-        DumpTable $data $r 12 $rmax (Join-Path $outDir 'raw_grade.csv'); break
-      }
-      if($c1 -eq 'YM'){
-        $c2 = if($cmax -ge 2){[string]$data[$r,2]}else{''}
-        if($c2 -eq 'GRAD_STATUS' -or $c2 -eq ''){ break }   # FACTS engine / 월목록 -> skip
-        if($c2 -eq 'GRADE'){ DumpTable $data $r 12 $rmax (Join-Path $outDir 'monthly_grade.csv'); break }
-        elseif($c2 -eq 'GROUP'){ DumpTable $data $r 12 $rmax (Join-Path $outDir 'vip_vs_normal.csv'); break }
-        elseif($c2 -eq 'FROM_CD'){ DumpTable $data $r 7 $rmax (Join-Path $outDir 'move_matrix.csv'); break }
-        else {
-          $hasVipPrefix = $false
-          for($j=1; $j -le $cmax; $j++){ if(([string]$data[$r,$j]).StartsWith('VIP_')){ $hasVipPrefix = $true; break } }
-          if($hasVipPrefix){ DumpTable $data $r 9 $rmax (Join-Path $outDir 'vip_growth.csv'); break }
-          else { DumpTable $data $r 9 $rmax (Join-Path $outDir 'conversion.csv'); break }
-        }
-      }
-    }
-  }
+  [System.IO.File]::WriteAllText($outFile, $sb.ToString(),
+    (New-Object System.Text.UTF8Encoding($true)))
+  Write-Host "WROTE $outFile ($n rows)"
   $wb.Close($false)
 } finally {
   $xl.Quit()
