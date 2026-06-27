@@ -60,6 +60,7 @@ a.navlink { display:block; padding:7px 12px; margin:3px 0; border-radius:8px;
 a.navlink:hover { background:#e0ebf7; color:#1d4666; }
 .subnav-label { font-size:11px; font-weight:700; color:#9aa3b2;
   letter-spacing:.04em; margin:10px 0 2px; }
+.subnav-preview { font-size:12px; color:#9aa3b2; line-height:1.5; margin-top:6px; }
 .insight { background:#eef3f9; border-left:4px solid #2C5F8A; border-radius:8px;
   padding:12px 16px; margin:6px 0 14px; font-size:14px; line-height:1.6; }
 .insight.warn { background:#fdf1ee; border-left-color:#E67E22; }
@@ -286,12 +287,28 @@ PAGES = {
         ("sec-aging-act", "구간별 활성도"),
     ],
 }
+active = st.session_state.setdefault("page", list(PAGES)[0])
+if active not in PAGES:
+    active = list(PAGES)[0]
 with st.sidebar:
     st.markdown("#### 📂 메뉴")
-    page = st.radio("메뉴", list(PAGES), label_visibility="collapsed", key="page")
-    st.markdown('<div class="subnav-label">바로가기</div>', unsafe_allow_html=True)
-    st.markdown("".join(f'<a href="#{a}" class="navlink">{l}</a>'
-                        for a, l in PAGES[page]), unsafe_allow_html=True)
+    # 아코디언: 상위 메뉴 클릭 → 하위 메뉴 펼침. 활성 그룹만 열림(LMS 스타일)
+    for pname, items in PAGES.items():
+        is_act = pname == active
+        with st.expander(pname, expanded=is_act):
+            if is_act:
+                st.markdown(
+                    "".join(f'<a href="#{a}" class="navlink">{l}</a>'
+                            for a, l in items), unsafe_allow_html=True)
+            else:
+                if st.button("이 메뉴 보기 →", key=f"sw_{pname}",
+                             use_container_width=True):
+                    st.session_state.page = pname
+                    st.rerun()
+                st.markdown('<div class="subnav-preview">'
+                            + " · ".join(l for _, l in items) + "</div>",
+                            unsafe_allow_html=True)
+    page = active
     st.markdown("#### 🔎 기간")
     ym0, ym1 = st.select_slider("기간(월)", options=YMS, value=(YMS[0], YMS[-1]),
                                 format_func=ymlab)
