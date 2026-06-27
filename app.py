@@ -32,6 +32,14 @@ KFONT = "'Noto Sans KR','Malgun Gothic','Apple SD Gothic Neo',sans-serif"
 ACCENT = "#2C5F8A"
 glabel = {g: f"{g} {NAME[g]}" for g in ORDER}
 
+# ── VIP 에이징(가입후 경과월) 구간 ──
+VIP_AGING = ["SP", "PT", "GD", "SV", "BK"]   # 에이징은 VIP 등급만(상→하)
+AGING_ORDER = ["신규 유입(0~2M)", "온보딩(3~5M)", "안정화(6~11M)",
+               "하락가망(12M)", "장기 유지(13M~)"]
+AGING_COLOR = {"신규 유입(0~2M)": "#5DADE2", "온보딩(3~5M)": "#48C9B0",
+               "안정화(6~11M)": "#58D68D", "하락가망(12M)": "#E67E22",
+               "장기 유지(13M~)": "#34495E"}
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
@@ -73,10 +81,11 @@ def insight(html, kind=""):
 
 def plot(fig, height=380, legend=True):
     fig.update_layout(font=dict(family=KFONT), height=height,
-                      margin=dict(t=24, b=10, l=10, r=10),
+                      margin=dict(t=30, b=10, l=10, r=10),
                       legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0)
                       if legend else dict())
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True,
+                    config={"displayModeBar": False})
 
 
 def ymlab(ym):
@@ -102,8 +111,24 @@ def _parse_xlsx(b):
     raise ValueError("원본에서 RAW 시트(첫 셀 'CURR_STD_YM')를 찾지 못했습니다.")
 
 
+def _parse_aging_xlsx(b):
+    """에이징 원본에서 헤더행(c1='YM' & c7='MAU')을 가진 시트를 찾아 추출."""
+    xls = pd.ExcelFile(io.BytesIO(b))
+    for sh in xls.sheet_names:
+        g = xls.parse(sh, header=None)
+        for r in range(min(6, len(g))):
+            row = g.iloc[r].tolist()
+            if (len(row) >= 7 and str(row[0]).strip() == "YM"
+                    and str(row[6]).strip() == "MAU"):
+                t = g.iloc[r + 1:, [0, 2, 3, 4, 5, 6, 7]].copy()
+                t.columns = ["YM", "GRADE_CD", "GRADE_NM", "AGING",
+                             "EFF_CNT", "MAU", "DAU"]
+                return t[t["YM"].astype(str).str.match(r"^\d{6}")]
+    raise ValueError("에이징 시트(헤더 YM..MAU)를 찾지 못했습니다.")
+
+
 @st.cache_data(show_spinner=False)
-def load_and_build(uploaded: bytes | None):
+def load_and_build(uploaded: bytes | None, aging_up: bytes | None):
     df = (_parse_xlsx(uploaded) if uploaded
           else pd.read_csv(DATA / "raw_grade.csv", encoding="utf-8-sig"))
     df = df.rename(columns=RENAME)
@@ -126,19 +151,32 @@ def load_and_build(uploaded: bytes | None):
     keep = mat[mat.FROM == mat.TO].groupby(["YM", "TO"])["CNT"].sum()
     inf = mat[mat.FROM != mat.TO].groupby(["YM", "TO"])["CNT"].sum()
     out = mat[mat.FROM != mat.TO].groupby(["YM", "FROM"])["CNT"].sum()
+    # 양식 정의: 유입=승급(하위→)+하락(상위→), 이탈=승급(→상위)+하락(→하위)
+    mv = mat[mat.FROM != mat.TO]
+    inf_up = mv[mv.dir == "승급"].groupby(["YM", "TO"])["CNT"].sum()   # 하위에서 올라옴
+    inf_dn = mv[mv.dir == "하락"].groupby(["YM", "TO"])["CNT"].sum()   # 상위에서 내려옴
+    out_up = mv[mv.dir == "승급"].groupby(["YM", "FROM"])["CNT"].sum()  # 상위로 올라감
+    out_dn = mv[mv.dir == "하락"].groupby(["YM", "FROM"])["CNT"].sum()  # 하위로 내려감
 
     idx = pd.MultiIndex.from_product([yms, ORDER], names=["YM", "GRADE"])
     gm = pd.DataFrame(index=idx)
     gm["유지"] = keep.reindex(idx, fill_value=0)
     gm["유입"] = inf.reindex(idx, fill_value=0)
     gm["이탈"] = out.reindex(idx, fill_value=0)
+    gm["유입_승급"] = inf_up.reindex(idx, fill_value=0)
+    gm["유입_하락"] = inf_dn.reindex(idx, fill_value=0)
+    gm["이탈_승급"] = out_up.reindex(idx, fill_value=0)
+    gm["이탈_하락"] = out_dn.reindex(idx, fill_value=0)
     gm = gm.reset_index()
+    gm["유효회원"] = gm["유지"] + gm["유입"]       # 당월유효(양식의 헤드라인)
     gm["전월유효"] = gm["유지"] + gm["이탈"]
-    gm["당월유효"] = gm["유지"] + gm["유입"]
+    gm["당월유효"] = gm["유효회원"]
     gm["순증"] = gm["유입"] - gm["이탈"]
-    for r, num, den in [("유지율", "유지", "전월유효"), ("유입률", "유입", "전월유효"),
-                        ("이탈률", "이탈", "전월유효")]:
-        gm[r] = gm[num] / gm[den].where(gm[den] != 0)
+    # 양식 분모: 유지/유입 구성비는 '당월 유효회원', 이탈률은 '전월 유효회원'
+    gm["유지구성"] = gm["유지"] / gm["유효회원"].where(gm["유효회원"] != 0)
+    gm["유입구성"] = gm["유입"] / gm["유효회원"].where(gm["유효회원"] != 0)
+    gm["이탈률"] = gm["이탈"] / gm["전월유효"].where(gm["전월유효"] != 0)
+    gm["잔존율"] = gm["유지"] / gm["전월유효"].where(gm["전월유효"] != 0)  # =1-이탈률
     gm["GROUP"] = gm["GRADE"].map(
         lambda g: "VIP" if g in VIP_ALL else "일반")
 
@@ -191,35 +229,49 @@ def load_and_build(uploaded: bytes | None):
     actdir["1인당MAU"] = actdir["MAU"] / actdir["CUST"].where(actdir["CUST"] != 0)
     actdir["stickiness"] = actdir["DAU"] / actdir["MAU"].where(actdir["MAU"] != 0)
 
-    for d in (gm, flowdir, group, conv, sticky, actdir, mat):
+    # ── VIP 에이징(가입후 경과월) ──
+    aging = (_parse_aging_xlsx(aging_up) if aging_up
+             else pd.read_csv(DATA / "aging.csv", encoding="utf-8-sig"))
+    aging = aging.rename(columns={"EFF_CNT": "유효회원수"})
+    aging["YM"] = aging["YM"].astype(str).str.replace(r"\.0$", "", regex=True)
+    for c in ("유효회원수", "MAU", "DAU"):
+        aging[c] = pd.to_numeric(aging[c], errors="coerce").fillna(0)
+    aging["AGING"] = aging["AGING"].astype(str).str.strip()
+    aging["GRADE_CD"] = aging["GRADE_CD"].astype(str).str.strip()
+
+    for d in (gm, flowdir, group, conv, sticky, actdir, mat, aging):
         d["LABEL"] = d["YM"].map(ymlab)
     return dict(gm=gm, flowdir=flowdir, group=group, conv=conv, mat=mat,
-                sticky=sticky, actdir=actdir, yms=yms)
+                sticky=sticky, actdir=actdir, yms=yms, aging=aging)
 
 
 # ── 사이드바: 업로드 · 목차 · 필터 ──────────────────────────
 with st.sidebar:
     st.header("⚙️ 설정")
     with st.expander("📤 원본 올리기 (월 갱신)", expanded=False):
-        st.caption("원본 **VIP_등급수불 xlsx** 를 그대로 올리면 git push 없이 "
-                   "RAW_입력 시트를 읽어 즉시 재계산합니다. (또는 convert.ps1 로 "
-                   "data/raw_grade.csv 갱신 후 push)")
-        up = st.file_uploader("등급수불 원본 (xlsx)", type=["xlsx"], key="up")
+        st.caption("원본 xlsx 를 그대로 올리면 git push 없이 즉시 재계산합니다. "
+                   "(또는 convert.ps1 로 data/*.csv 갱신 후 push)")
+        up = st.file_uploader("등급수불 원본 (RAW_입력)", type=["xlsx"], key="up")
+        up_ag = st.file_uploader("VIP 에이징 원본 (2번_data)", type=["xlsx"],
+                                 key="up_ag")
 
 try:
-    B = load_and_build(up.getvalue() if up else None)
+    B = load_and_build(up.getvalue() if up else None,
+                       up_ag.getvalue() if up_ag else None)
 except Exception as e:
     st.error(f"데이터를 읽는 중 오류: {e}")
     st.stop()
 
 gm, flowdir, group, conv = B["gm"], B["flowdir"], B["group"], B["conv"]
 mat, sticky, actdir, YMS = B["mat"], B["sticky"], B["actdir"], B["yms"]
+aging = B["aging"]
 
 MENU = [("sec-summary", "핵심 요약"), ("sec-flow", "수불 한눈에 (승급·유지·하락)"),
         ("sec-grade", "등급별 수불 추세"), ("sec-group", "VIP vs 일반"),
         ("sec-conv", "일반→VIP 전환 & 내부 대사"),
         ("sec-matrix", "이동 방향성 (From→To)"),
-        ("sec-activity", "DAU/MAU 활성도 교차")]
+        ("sec-activity", "DAU/MAU 활성도 교차"),
+        ("sec-aging", "VIP 에이징 분포")]
 with st.sidebar:
     st.markdown("#### 📑 목차")
     st.markdown("".join(f'<a href="#{a}" class="navlink">{l}</a>'
@@ -301,11 +353,15 @@ with c2:
     st.caption(f"{ymlab(msel)} 등급별 유입(+)·이탈(−). 상위→하위 순.")
 
 # ════════ 등급별 수불 추세 ════════
-section("등급별 수불 추세", "등급별 유지율·유입률·이탈률 (상위→하위)",
+section("등급별 수불 추세",
+        "잔존율=유지/전월유효 · 구성비=유지·유입/당월 유효회원 · 이탈률=이탈/전월유효 (양식 정의)",
         anchor="sec-grade")
+METRICS = {"잔존율(전월대비)": "잔존율", "유지 구성비": "유지구성",
+           "유입 구성비": "유입구성", "이탈률": "이탈률", "순증(명)": "순증"}
 c1, c2 = st.columns([1, 3])
 with c1:
-    metric = st.radio("지표", ["유지율", "유입률", "이탈률", "순증"], key="gmet")
+    mlbl = st.radio("지표", list(METRICS), key="gmet")
+    metric = METRICS[mlbl]
     gsel = st.multiselect("등급", ORDER, default=ORDER,
                           format_func=lambda g: glabel[g], key="gsel")
 with c2:
@@ -315,10 +371,10 @@ with c2:
                   color_discrete_map=GCOLOR, category_orders={"GRADE": ORDER})
     if metric != "순증":
         fig.update_yaxes(tickformat=".0%")
-    fig.update_layout(legend_title="등급")
+    fig.update_layout(legend_title="등급", yaxis_title=mlbl)
     plot(fig, height=380)
-insight("VIP 등급(BK·SV·GD)은 유지율 ~85%로 월변동이 크고, <b>RD(Red)는 ~99.6%</b>로 "
-        "사실상 고착. SP·PT는 연1회 고정등급이라 월 단위 유지율 해석에서 제외했습니다.")
+insight("VIP 등급(BK·SV·GD)은 잔존율 변동이 크고, <b>RD(Red)는 ~99%</b>로 사실상 고착. "
+        "SP·PT는 연1회 고정등급이라 월 단위 잔존율 해석에서 제외했습니다.")
 
 # ════════ VIP vs 일반 ════════
 section("VIP vs 일반 잔존력", "VIP는 SP·PT 제외(BK·SV·GD). 유지율·순증 비교",
@@ -390,30 +446,47 @@ with c2:
         link=dict(source=s["FROM"].map(L), target=s["TO"].map(R),
                   value=s["CNT"], color=lc)))
     fig.update_layout(font=dict(family=KFONT, size=11), height=420,
-                      margin=dict(t=24, b=10, l=10, r=10))
-    st.plotly_chart(fig, use_container_width=True)
+                      margin=dict(t=30, b=10, l=10, r=10))
+    st.plotly_chart(fig, use_container_width=True,
+                    config={"displayModeBar": False})
     st.caption("좌=전월, 우=당월. 초록=승급, 빨강=하락 흐름.")
 
-st.markdown("**등급별 유입 출처 / 이탈 행선지**")
-gsel2 = st.selectbox("등급", ORDER, index=ORDER.index("BK"),
-                     format_func=lambda g: glabel[g], key="gd2")
+# ── 등급별 수불 상세 (양식 정의) ──
+st.markdown("---")
+gsel2 = st.selectbox(f"📋 등급별 수불 상세 — {ymlab(mm)} · 등급 선택", ORDER,
+                     index=ORDER.index("BK"), format_func=lambda g: glabel[g],
+                     key="gd2")
+DIRC = {"승급": "#27AE60", "하락": "#E74C3C"}
+row = gm[(gm.YM == mm) & (gm.GRADE == gsel2)].iloc[0]
+kk = st.columns(4)
+metric_card(kk[0], "유효회원 (유지+유입)", f"{row['유효회원']:,.0f}명", f"{ymlab(mm)} 당월")
+metric_card(kk[1], "유지", f"{row['유지']:,.0f}명",
+            f"유효회원의 {row['유지구성']*100:.0f}%")
+metric_card(kk[2], "유입", f"{row['유입']:,.0f}명",
+            f"유효회원의 {row['유입구성']*100:.0f}% · 승급 {row['유입_승급']:,.0f} / "
+            f"하락 {row['유입_하락']:,.0f}")
+metric_card(kk[3], "이탈", f"{row['이탈']:,.0f}명",
+            f"전월유효의 {row['이탈률']*100:.0f}% · 승급 {row['이탈_승급']:,.0f} / "
+            f"하락 {row['이탈_하락']:,.0f}")
 cc1, cc2 = st.columns(2)
 with cc1:
-    src_ = (mx[(mx.TO == gsel2) & (mx.FROM != gsel2)].groupby("FROM")["CNT"].sum()
-            .reindex(ORDER).dropna())
-    fig = px.bar(x=src_.values, y=src_.index, orientation="h", color=src_.index,
-                 color_discrete_map=GCOLOR, labels=dict(x="명", y="전월"))
-    fig.update_layout(yaxis=dict(autorange="reversed"), showlegend=False,
-                      title=f"⬆ {gsel2} 유입 출처")
-    plot(fig, height=300, legend=False)
+    sdf = (mx[(mx.TO == gsel2) & (mx.FROM != gsel2)]
+           .groupby(["FROM", "dir"], as_index=False)["CNT"].sum())
+    fig = px.bar(sdf, x="CNT", y="FROM", color="dir", orientation="h",
+                 color_discrete_map=DIRC, category_orders={"FROM": ORDER},
+                 labels=dict(CNT="명", FROM="전월 등급", dir="유형"))
+    fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="")
+    plot(fig, height=320)
+    st.caption(f"⬆ {gsel2} 유입 출처 — 초록=하위에서 승급, 빨강=상위에서 하락")
 with cc2:
-    dst_ = (mx[(mx.FROM == gsel2) & (mx.TO != gsel2)].groupby("TO")["CNT"].sum()
-            .reindex(ORDER).dropna())
-    fig = px.bar(x=dst_.values, y=dst_.index, orientation="h", color=dst_.index,
-                 color_discrete_map=GCOLOR, labels=dict(x="명", y="당월"))
-    fig.update_layout(yaxis=dict(autorange="reversed"), showlegend=False,
-                      title=f"⬇ {gsel2} 이탈 행선지")
-    plot(fig, height=300, legend=False)
+    ddf = (mx[(mx.FROM == gsel2) & (mx.TO != gsel2)]
+           .groupby(["TO", "dir"], as_index=False)["CNT"].sum())
+    fig = px.bar(ddf, x="CNT", y="TO", color="dir", orientation="h",
+                 color_discrete_map=DIRC, category_orders={"TO": ORDER},
+                 labels=dict(CNT="명", TO="당월 등급", dir="유형"))
+    fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="")
+    plot(fig, height=320)
+    st.caption(f"⬇ {gsel2} 이탈 행선지 — 초록=상위로 승급, 빨강=하위로 하락")
 
 # ════════ DAU/MAU 활성도 ════════
 section("DAU/MAU 활성도 교차",
@@ -440,15 +513,87 @@ with c2:
     st.caption("이동방향별 1인당 MAU. 하락 코호트의 활성도가 낮다면 "
                "'활성 저하 → 하락' 선행지표로 활용 가능.")
 
-cor = sticky.merge(gm[["YM", "GRADE", "유지율"]], on=["YM", "GRADE"])
+cor = sticky.merge(gm[["YM", "GRADE", "잔존율"]], on=["YM", "GRADE"])
 cor = rng(cor)
 cor["GROUP"] = cor["GRADE"].map(lambda g: "VIP" if g in VIP_ALL else "일반")
-fig = px.scatter(cor, x="stickiness", y="유지율", color="GRADE", symbol="GROUP",
+fig = px.scatter(cor, x="stickiness", y="잔존율", color="GRADE", symbol="GROUP",
                  size="CUST", size_max=30, color_discrete_map=GCOLOR,
                  hover_data=["LABEL"], category_orders={"GRADE": ORDER})
 fig.update_xaxes(tickformat=".0%", title="Stickiness (DAU/MAU)")
-fig.update_yaxes(tickformat=".0%", title="유지율")
+fig.update_yaxes(tickformat=".0%", title="잔존율(전월대비)")
 plot(fig, height=440)
-insight("우상향이면 <b>자주 오는 등급일수록 잘 남는다</b> → 활성도 부스팅이 곧 유지율 "
+insight("우상향이면 <b>자주 오는 등급일수록 잘 남는다</b> → 활성도 부스팅이 곧 잔존율 "
         "방어. 버블=인원, 모양=VIP/일반.")
 st.caption("ⓘ SP·PT(연1회 고정)는 월 유지율 집계 제외 — 활성도 차트에는 선택 시 표시됩니다.")
+
+# ════════ VIP 에이징 분포 ════════
+section("VIP 에이징 분포",
+        "VIP 가입후 경과월 코호트: 신규유입(0~2M)→온보딩(3~5M)→안정화(6~11M)→"
+        "하락가망(12M)→장기유지(13M~). 소스=에이징 원본(수불 템플릿과 동일 기준, BK 1%내 일치).",
+        anchor="sec-aging")
+ac1, ac2 = st.columns([1, 3])
+with ac1:
+    ametric = st.radio("지표", ["유효회원수", "MAU", "DAU"], key="ametric")
+    ascope = st.multiselect("등급", VIP_AGING, default=VIP_AGING,
+                            format_func=lambda g: glabel[g], key="ascope")
+ag = rng(aging)
+ag = ag[ag.GRADE_CD.isin(ascope)]
+alatest = ag[ag.YM == ym1]
+atot = alatest[ametric].sum()
+
+
+def ashare(bucket):
+    return alatest[alatest.AGING == bucket][ametric].sum() / atot if atot else 0
+
+
+with ac2:
+    kk = st.columns(4)
+    metric_card(kk[0], f"VIP {ametric} 합", f"{atot:,.0f}", f"{ymlab(ym1)} · 선택등급")
+    metric_card(kk[1], "하락가망(12M) 비중", f"{ashare('하락가망(12M)')*100:.1f}%",
+                "최초구매 만료·하락위험 高")
+    metric_card(kk[2], "장기유지(13M~) 비중", f"{ashare('장기 유지(13M~)')*100:.1f}%",
+                "로열티 高")
+    metric_card(kk[3], "신규유입(0~2M) 비중", f"{ashare('신규 유입(0~2M)')*100:.1f}%",
+                "정착 전·이탈 가능")
+
+c1, c2 = st.columns(2)
+with c1:
+    anorm = st.checkbox("구성비(100%)로 보기", value=True, key="agnorm")
+    t1 = ag.groupby(["YM", "LABEL", "AGING"], as_index=False)[ametric].sum()
+    if anorm:
+        t1["tot"] = t1.groupby("YM")[ametric].transform("sum")
+        t1["val"] = t1[ametric] / t1["tot"].where(t1["tot"] != 0)
+    else:
+        t1["val"] = t1[ametric]
+    fig = px.bar(t1.sort_values("YM"), x="LABEL", y="val", color="AGING",
+                 category_orders={"AGING": AGING_ORDER},
+                 color_discrete_map=AGING_COLOR)
+    if anorm:
+        fig.update_yaxes(tickformat=".0%")
+    fig.update_layout(legend_title="에이징", barmode="stack",
+                      yaxis_title="구성비" if anorm else ametric)
+    plot(fig, height=380)
+    st.caption("에이징 구성 추세. 하락가망·신규유입 비중 변화가 리텐션 신호.")
+with c2:
+    t2 = ag[ag.YM == ym1].groupby(["GRADE_CD", "AGING"], as_index=False)[ametric].sum()
+    fig = px.bar(t2, x=ametric, y="GRADE_CD", color="AGING", orientation="h",
+                 category_orders={"AGING": AGING_ORDER, "GRADE_CD": VIP_AGING},
+                 color_discrete_map=AGING_COLOR)
+    fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="에이징",
+                      barmode="stack")
+    plot(fig, height=380)
+    st.caption(f"{ymlab(ym1)} 등급별 에이징 구성 (상위→하위).")
+
+st.markdown("**에이징 구간별 활성도 (DAU/MAU Stickiness)**")
+t3 = ag.groupby(["YM", "LABEL", "AGING"], as_index=False)[["DAU", "MAU"]].sum()
+t3["stickiness"] = t3["DAU"] / t3["MAU"].where(t3["MAU"] != 0)
+fig = px.line(t3.sort_values("YM"), x="LABEL", y="stickiness", color="AGING",
+              markers=True, category_orders={"AGING": AGING_ORDER},
+              color_discrete_map=AGING_COLOR)
+fig.update_yaxes(tickformat=".0%")
+fig.update_layout(legend_title="에이징")
+plot(fig, height=360)
+insight("<b>하락가망(12M)</b>은 최초 구매실적이 만료돼 하락 위험이 가장 큰 구간 — 이 코호트의 "
+        "규모·활성도 추세가 타깃 리텐션의 핵심 지표입니다. 신규유입 활성도가 장기유지보다 크게 "
+        "낮으면 온보딩 단계 보강이 필요합니다.", "warn")
+st.caption("ⓘ 에이징 원본에 202505월이 누락되어 해당 월은 비어 있습니다.")
