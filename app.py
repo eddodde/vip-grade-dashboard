@@ -289,9 +289,14 @@ PAGES = {
         ("sec-activity", "8 · 보조: DAU/MAU 활성도"),
     ],
     "⏳ VIP 에이징": [
-        ("sec-aging", "에이징 분포 개요"),
-        ("sec-aging-mix", "구간 구성 추세"),
-        ("sec-aging-act", "구간별 활성도"),
+        ("sec-aging", "1 · 현황: 구간 분포"),
+        ("sec-aging-mix", "2 · 코호트는 어떻게 늙나"),
+        ("sec-aging-act", "3 · 정착 건강(구간별 활성도)"),
+    ],
+    "🔗 통합 진단": [
+        ("sec-int-pool", "1 · 풀은 정체인데 속은?"),
+        ("sec-int-score", "2 · 등급 건강 스코어카드"),
+        ("sec-int-act", "3 · 통합 결론·시사점"),
     ],
 }
 active = st.session_state.setdefault("page", list(PAGES)[0])
@@ -343,7 +348,12 @@ def how_to(html):
 
 
 def render_aging():
-    section("VIP 에이징 분포 개요",
+    insight(
+        "🧭 <b>이 페이지의 흐름 — \"VIP는 잘 정착하고 오래 남는가, 어디서 새는가?\"</b><br>"
+        "① 지금 구간 분포(충성층 vs 신참) → ② 코호트가 어떻게 늙어가는지(신규→장기유지로 "
+        "이어지나, 새는가) → ③ 구간별 활성도로 정착 건강 점검(온보딩 약화·하락가망 위험), "
+        "순으로 봅니다.")
+    section("1 · 현황: 구간 분포",
             "VIP 가입후 경과월 코호트: 신규유입(0~2M) → 온보딩(3~5M) → 안정화(6~11M) "
             "→ 하락가망(12M) → 장기유지(13M~). 소스=에이징 원본(수불 템플릿과 동일 기준).",
             anchor="sec-aging")
@@ -407,7 +417,8 @@ def render_aging():
         f"다만 방문빈도(Stickiness)는 <b>{valley} 구간에서 최저({valley_s*100:.0f}%)</b> — "
         f"{_valley_note}. 하락가망(12M)은 {risk_cnt:,.0f}명으로 {risk_dir} 추세입니다.")
 
-    section("구간 구성 추세", "월별로 에이징 구간 비중이 어떻게 변하는지 (코호트 이동)",
+    section("2 · 코호트는 어떻게 늙나 — 구간 구성 추세",
+            "월별로 에이징 구간 비중이 어떻게 변하는지 (신규→장기유지로 잘 이어지나)",
             anchor="sec-aging-mix")
     how_to("• <b>색</b>: 신규유입=파랑, 온보딩=보라, 안정화=초록, 하락가망=주황, "
            "장기유지=남색.<br>"
@@ -443,7 +454,7 @@ def render_aging():
         plot(fig, height=380)
         st.caption(f"{ymlab(ym1)} 등급별 에이징 구성 (상위→하위).")
 
-    section("구간별 활성도 (DAU/MAU Stickiness)",
+    section("3 · 정착 건강 — 구간별 활성도(DAU/MAU)",
             "에이징 구간별로 얼마나 자주 방문하는지 — 온보딩 약화·정착 여부 점검",
             anchor="sec-aging-act")
     t3 = ag.groupby(["YM", "LABEL", "AGING"], as_index=False)[["DAU", "MAU"]].sum()
@@ -477,6 +488,92 @@ def render_aging():
                    + " 데이터가 없어 해당 월은 비어 있습니다.")
 
 
+def render_integrated():
+    insight(
+        "🧭 <b>왜 합쳐 보나</b> — 수불은 '풀이 왜 변하나(유입·이탈)', 에이징은 '풀의 질·나이"
+        "(신참 vs 충성층)'를 말합니다. 둘을 겹치면 <b>풀 정체의 진짜 이유</b>가 드러납니다. "
+        "① 풀 vs 구성 → ② 등급 건강 스코어카드 → ③ 통합 결론.")
+
+    # ── 1) VIP 풀(수불) vs 에이징 구성 ──
+    section("1 · 풀은 정체인데, 속은 늙고 있다",
+            "VIP 풀 규모(수불 당월유효)와 에이징 구성(장기유지·신규유입 비중)을 겹쳐 본다.",
+            anchor="sec-int-pool")
+    vp = gm[gm.GRADE.isin(VIP_ALL)].groupby("YM", as_index=False)["당월유효"].sum()
+    tot = aging.groupby("YM")["유효회원수"].sum()
+
+    def _share(bucket):
+        return aging[aging.AGING == bucket].groupby("YM")["유효회원수"].sum() / tot
+    m = vp.copy()
+    m["LABEL"] = m["YM"].map(ymlab)
+    m["long"] = m["YM"].map(_share("장기 유지(13M~)"))
+    m["new"] = m["YM"].map(_share("신규 유입(0~2M)"))
+    m = m[(m.YM >= ym0) & (m.YM <= ym1)].sort_values("YM")
+    fig = go.Figure()
+    fig.add_bar(x=m["LABEL"], y=m["당월유효"], name="VIP 풀(명)",
+                marker_color="rgba(44,95,138,.25)")
+    fig.add_scatter(x=m["LABEL"], y=m["long"], name="장기유지 비중",
+                    mode="lines+markers", line=dict(color="#2C3E50", width=2.5),
+                    yaxis="y2")
+    fig.add_scatter(x=m["LABEL"], y=m["new"], name="신규유입 비중",
+                    mode="lines+markers", line=dict(color="#3498DB", width=2.5),
+                    yaxis="y2")
+    fig.update_layout(
+        yaxis=dict(title="VIP 풀(명)", tickformat=",d"),
+        yaxis2=dict(title="구성 비중", overlaying="y", side="right",
+                    tickformat=".0%", showgrid=False, rangemode="tozero"),
+        legend=dict(orientation="h", y=1.0, x=0))
+    plot(fig, height=380)
+    _p0, _p1 = m["당월유효"].iloc[0], m["당월유효"].iloc[-1]
+    _l0, _l1 = m["long"].iloc[0], m["long"].iloc[-1]
+    _n0, _n1 = m["new"].iloc[0], m["new"].iloc[-1]
+    insight(
+        f"🔎 <b>진단</b> — 풀은 {_p0:,.0f} → {_p1:,.0f}명으로 <b>거의 정체</b>인데, "
+        f"안에서는 <b>장기유지 비중이 {_l0*100:.0f}% → {_l1*100:.0f}%로 오르고 "
+        f"신규유입은 {_n0*100:.0f}% → {_n1*100:.0f}%로 얇아졌습니다</b>. "
+        "= <b>새 피는 줄고 기존 충성층이 풀을 떠받치는 '고령화'</b>. 수불에서 본 "
+        "'일반→VIP 유입 병목'이 에이징에선 '신규 비중 감소'로 나타난 같은 현상입니다.",
+        "warn")
+
+    # ── 2) 등급 건강 스코어카드 ──
+    section("2 · 등급 건강 스코어카드",
+            f"{ymlab(ym1)} VIP 등급별 수불(풀·순증·잔존율) + 에이징(신규·하락가망·장기유지) 한 표",
+            anchor="sec-int-score")
+    ag1 = aging[aging.YM == ym1]
+    totg = ag1.groupby("GRADE_CD")["유효회원수"].sum()
+    rows = []
+    for g in [x for x in ORDER if x in VIP_ALL]:
+        gr = gm[(gm.YM == ym1) & (gm.GRADE == g)]
+        if not len(gr):
+            continue
+        r = gr.iloc[0]
+
+        def ash(bucket, gg=g):
+            v = ag1[(ag1.GRADE_CD == gg) & (ag1.AGING == bucket)]["유효회원수"].sum()
+            t = totg.get(gg, 0)
+            return v / t if t else 0
+        rows.append({
+            "등급": f"{g} {NAME[g]}", "풀(명)": f"{r['당월유효']:,.0f}",
+            "순증": f"{r['순증']:+,.0f}", "잔존율": f"{r['잔존율']*100:.0f}%",
+            "신규유입%": f"{ash('신규 유입(0~2M)')*100:.0f}%",
+            "하락가망%": f"{ash('하락가망(12M)')*100:.1f}%",
+            "장기유지%": f"{ash('장기 유지(13M~)')*100:.0f}%"})
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.caption("왼쪽 3개(풀·순증·잔존율)=수불 / 오른쪽 3개(신규·하락가망·장기유지)=에이징. "
+               "잔존율 낮고 신규유입 비중 높은 등급 = 회전 빠른 '불안정' 등급.")
+
+    # ── 3) 통합 결론 ──
+    section("3 · 통합 결론 · 시사점", "두 데이터가 가리키는 한 가지 방향",
+            anchor="sec-int-act")
+    insight(
+        "🎯 <b>통합 결론</b> — VIP 풀이 안 크는 건 두 가지가 겹친 결과입니다. "
+        "<b>① 안 들어온다</b>(수불: 일반→VIP 전환 0.2%대 병목) · "
+        "<b>② 들어와도 정착 못한다</b>(에이징: 온보딩 구간 활성 최저, 신규유입 비중 감소). "
+        "지금은 장기유지 충성층이 풀을 떠받쳐 '정체'로 보이지만, <b>이들이 노쇠·이탈하기 "
+        "시작하면 받쳐줄 신규가 없어 풀이 급감</b>할 수 있습니다.<br>"
+        "→ 레버는 결국 <b>신규 확보(일반 상위 PP 승급 부스팅) + 정착(온보딩 강화)</b> 두 축. "
+        "스코어카드에서 잔존율 낮고 신규 비중 큰 등급부터 우선 타깃.", "warn")
+
+
 st.title("📊 VIP 등급 수불 대시보드")
 st.caption(f"기간 {ymlab(ym0)} ~ {ymlab(ym1)} · 모든 수치는 RAW에서 직접 산출 "
            "(유입+유지 단일기입 전이모델)")
@@ -485,11 +582,16 @@ PAGE_INTRO = {
     "VIP 유지율은 연1회 고정등급 SP·PT를 제외(BK·SV·GD)합니다.",
     "⏳ VIP 에이징": "VIP <b>가입후 경과월(에이징)</b> 코호트별 규모·활성도를 봅니다. "
     "하락가망(12M) 구간이 하락 위험의 핵심 타깃입니다.",
+    "🔗 통합 진단": "<b>수불(왜 변하나)</b> 과 <b>에이징(풀의 질·나이)</b> 을 합쳐 봅니다. "
+    "각각 따로는 안 보이는 '풀 정체의 진짜 이유'를 진단합니다.",
 }
 insight(PAGE_INTRO[page])
 
-if not page.startswith("📊"):      # 에이징 페이지 → 렌더 후 종료
+if page.startswith("⏳"):           # 에이징 페이지 → 렌더 후 종료
     render_aging()
+    st.stop()
+if page.startswith("🔗"):           # 통합 진단 페이지 → 렌더 후 종료
+    render_integrated()
     st.stop()
 
 insight(
