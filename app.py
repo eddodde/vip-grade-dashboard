@@ -66,6 +66,26 @@ a.navlink:hover { background:#e0ebf7; color:#1d4666; }
 .insight.warn { background:#fdf1ee; border-left-color:#E67E22; }
 .insight.ok   { background:#eef7f0; border-left-color:#27AE60; }
 .insight b { color:#1a2236; }
+.headline { background:#1a2236; color:#fff; border-radius:10px; padding:16px 20px;
+  font-size:16px; font-weight:700; line-height:1.55; margin:6px 0 14px; }
+.headline span { color:#7FB3E0; }
+.ccard { background:#fff; border:1px solid #e7ebf2; border-radius:10px;
+  padding:14px 16px; margin-bottom:10px; }
+.ccard .t { font-size:12px; font-weight:700; letter-spacing:.03em;
+  padding:2px 9px; border-radius:10px; display:inline-block; margin-bottom:8px; }
+.ccard.now .t { background:#eef3f9; color:#2C5F8A; }
+.ccard.why .t { background:#fdf1ee; color:#C0392B; }
+.ccard.risk .t { background:#fdeecf; color:#9a6a00; }
+.ccard ul { margin:0; padding-left:16px; font-size:13px; line-height:1.65; }
+.ccard b { color:#1a2236; }
+.atbl { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
+.atbl th { background:#1a2236; color:#fff; text-align:left; padding:9px 11px;
+  font-size:12px; }
+.atbl td { border-bottom:1px solid #eef0f4; padding:10px 11px; vertical-align:top;
+  line-height:1.5; }
+.atbl td.pri { font-weight:700; color:#2C5F8A; white-space:nowrap; }
+.atbl td.seg { font-weight:700; color:#1a2236; }
+.atbl tr:nth-child(even) td { background:#fafbfd; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -536,8 +556,17 @@ def render_integrated():
 
     # ── 2) 등급 건강 스코어카드 ──
     section("2 · 등급 건강 스코어카드",
-            f"{ymlab(ym1)} VIP 등급별 수불(풀·순증·잔존율) + 에이징(신규·하락가망·장기유지) 한 표",
+            f"{ymlab(ym1)} VIP 등급별로 '회전(수불)'과 '나이(에이징)'를 한 줄에 — "
+            "어느 등급이 불안정/고령인지 한눈에.",
             anchor="sec-int-score")
+    with st.expander("📖 어떻게 읽나 (열어보기)"):
+        st.markdown(
+            "- **풀·순증·잔존율 = 수불(회전)** → 잔존율 낮고 신규유입 비중 높으면 사람이 빨리 "
+            "들고나는 **회전 빠른 입구**(불안정).\n"
+            "- **신규유입·하락가망·장기유지% = 에이징(나이)** → 장기유지%↑=충성·고령, "
+            "하락가망%=다음 달 하락 위험에 노출된 비중.\n"
+            "- **시그널(자동 판정)**: 🟢 안정 · 🟡 감소세 · 🔴 회전 빠름(입구 불안정) · "
+            "⚪ 연1회 고정(SP·PT, 월 해석 주의).")
     ag1 = aging[aging.YM == ym1]
     totg = ag1.groupby("GRADE_CD")["유효회원수"].sum()
     rows = []
@@ -551,27 +580,73 @@ def render_integrated():
             v = ag1[(ag1.GRADE_CD == gg) & (ag1.AGING == bucket)]["유효회원수"].sum()
             t = totg.get(gg, 0)
             return v / t if t else 0
+        ret, net, newp = r["잔존율"], r["순증"], ash("신규 유입(0~2M)")
+        if g in ("SP", "PT"):
+            sig = "⚪ 연1회 고정"
+        elif ret < 0.87 and newp > 0.13:
+            sig = "🔴 회전 빠름"
+        elif net < 0:
+            sig = "🟡 감소세"
+        else:
+            sig = "🟢 안정"
         rows.append({
-            "등급": f"{g} {NAME[g]}", "풀(명)": f"{r['당월유효']:,.0f}",
-            "순증": f"{r['순증']:+,.0f}", "잔존율": f"{r['잔존율']*100:.0f}%",
-            "신규유입%": f"{ash('신규 유입(0~2M)')*100:.0f}%",
+            "등급": f"{g} {NAME[g]}", "시그널": sig,
+            "풀(명)": f"{r['당월유효']:,.0f}", "순증": f"{net:+,.0f}",
+            "잔존율": f"{ret*100:.0f}%", "신규유입%": f"{newp*100:.0f}%",
             "하락가망%": f"{ash('하락가망(12M)')*100:.1f}%",
             "장기유지%": f"{ash('장기 유지(13M~)')*100:.0f}%"})
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    st.caption("왼쪽 3개(풀·순증·잔존율)=수불 / 오른쪽 3개(신규·하락가망·장기유지)=에이징. "
-               "잔존율 낮고 신규유입 비중 높은 등급 = 회전 빠른 '불안정' 등급.")
+    st.caption("좌=수불(풀·순증·잔존율) · 우=에이징(신규·하락가망·장기유지). "
+               "BK/SV 같은 입구 등급일수록 회전이 빠르고, 상위로 갈수록 안정·고령.")
 
-    # ── 3) 통합 결론 ──
-    section("3 · 통합 결론 · 시사점", "두 데이터가 가리키는 한 가지 방향",
+    # ── 3) 통합 결론 · CRM 액션 ──
+    section("3 · 통합 결론 · CRM 액션 플랜",
+            "무엇이(현상) → 왜(원인) → 그래서(리스크) → 무엇을(CRM 액션)",
             anchor="sec-int-act")
-    insight(
-        "🎯 <b>통합 결론</b> — VIP 풀이 안 크는 건 두 가지가 겹친 결과입니다. "
-        "<b>① 안 들어온다</b>(수불: 일반→VIP 전환 0.2%대 병목) · "
-        "<b>② 들어와도 정착 못한다</b>(에이징: 온보딩 구간 활성 최저, 신규유입 비중 감소). "
-        "지금은 장기유지 충성층이 풀을 떠받쳐 '정체'로 보이지만, <b>이들이 노쇠·이탈하기 "
-        "시작하면 받쳐줄 신규가 없어 풀이 급감</b>할 수 있습니다.<br>"
-        "→ 레버는 결국 <b>신규 확보(일반 상위 PP 승급 부스팅) + 정착(온보딩 강화)</b> 두 축. "
-        "스코어카드에서 잔존율 낮고 신규 비중 큰 등급부터 우선 타깃.", "warn")
+    st.markdown(
+        '<div class="headline">📌 VIP 풀은 <span>"고령화된 정체"</span> — '
+        '신규는 안 들어오고(유입 병목), 들어와도 정착 못한다(온보딩 약화).</div>',
+        unsafe_allow_html=True)
+    cc = st.columns(3)
+    cc[0].markdown(
+        '<div class="ccard now"><span class="t">현상 What</span><ul>'
+        '<li>VIP 풀 <b>~62k 정체</b> (순증 ≈ 0)</li>'
+        '<li>장기유지 비중 <b>57%→62% ↑</b></li>'
+        '<li>신규유입 비중 <b>얇아짐</b></li></ul></div>', unsafe_allow_html=True)
+    cc[1].markdown(
+        '<div class="ccard why"><span class="t">원인 Why</span><ul>'
+        '<li><b>유입 병목</b> — 일반→VIP 전환 0.2%대</li>'
+        '<li><b>정착 실패</b> — 온보딩(3~5M) 활성 최저</li>'
+        '<li>일반 99%가 RD↔PP 내부만 순환</li></ul></div>', unsafe_allow_html=True)
+    cc[2].markdown(
+        '<div class="ccard risk"><span class="t">리스크 So-what</span><ul>'
+        '<li>충성층이 <b>풀을 떠받치는 중</b></li>'
+        '<li>이들 노쇠·이탈 시 <b>받쳐줄 신규 없음</b></li>'
+        '<li>→ 장기 <b>풀 급감 위험</b></li></ul></div>', unsafe_allow_html=True)
+    st.markdown("##### 🎯 CRM 액션 플랜 (무엇을)")
+    acts = [
+        ("① 즉시", "일반 PP 상위 — VIP 문턱 근접",
+         "승급 넛지: '구매 N건·M원만 더하면 VIP' 한정 프로모션·전용 쿠폰·진척 알림",
+         "신규 유입 ↑ (병목 직접 해소)"),
+        ("② 즉시", "신규 VIP 0~5M (온보딩)",
+         "웰컴 저니 + 앱 푸시 + 첫 재구매 쿠폰으로 방문 루틴화, 등급 혜택 학습",
+         "정착률 ↑ → 장기유지 전환"),
+        ("③ 상시", "하락가망 12M (재구매 없는 층)",
+         "등급 만료 D-30 리마인드 + 재구매 인센티브 (구매 데이터로 무재구매자 타겟팅)",
+         "하락 방어 (활성 고객이라 반응 여지 큼)"),
+        ("④ 모니터", "장기유지 13M+ 충성층",
+         "핵심 혜택 유지 + 활성도(MAU/DAU) 하락 시 조기경보 세그먼트 운영",
+         "풀 붕괴 예방 (이탈 선제 대응)"),
+    ]
+    _arows = "".join(
+        f"<tr><td class='pri'>{p}</td><td class='seg'>{s}</td>"
+        f"<td>{a}</td><td>{e}</td></tr>" for p, s, a, e in acts)
+    st.markdown(
+        "<table class='atbl'><thead><tr><th>우선순위</th><th>타겟 세그먼트</th>"
+        "<th>CRM 액션</th><th>기대효과</th></tr></thead>"
+        f"<tbody>{_arows}</tbody></table>", unsafe_allow_html=True)
+    st.caption("①②=신규 확보·정착(VIP 순증의 두 핵심 레버) · ③④=기존 풀 방어. "
+               "②③은 구매 데이터와 결합하면 타겟 정밀도가 올라갑니다.")
 
 
 st.title("📊 VIP 등급 수불 대시보드")
