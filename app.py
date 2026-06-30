@@ -84,11 +84,9 @@ def insight(html, kind=""):
 
 
 def plot(fig, height=380, legend=True):
-    # 축 숫자를 60k 가 아니라 60,000(#,##0)으로. 기존 포맷(%,d 등)은 유지.
-    for ax in list(fig.select_xaxes()) + list(fig.select_yaxes()):
-        ax.separatethousands = True
-        if not ax.tickformat and (ax.type in (None, "linear")):
-            ax.tickformat = ",d"
+    # 천단위 콤마(안전: 날짜·카테고리 축엔 무영향). 카운트 축의 ',d'는 차트별 명시.
+    fig.update_xaxes(separatethousands=True)
+    fig.update_yaxes(separatethousands=True)
     fig.update_layout(font=dict(family=KFONT), height=height,
                       margin=dict(t=30, b=10, l=10, r=10),
                       legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0)
@@ -423,8 +421,7 @@ def render_aging():
         fig = px.bar(t1.sort_values("YM"), x="LABEL", y="val", color="AGING",
                      category_orders={"AGING": AGING_ORDER},
                      color_discrete_map=AGING_COLOR)
-        if anorm:
-            fig.update_yaxes(tickformat=".0%")
+        fig.update_yaxes(tickformat=".0%" if anorm else ",d")
         fig.update_layout(legend_title="에이징", barmode="stack",
                           yaxis_title="구성비" if anorm else ametric)
         plot(fig, height=380)
@@ -435,6 +432,7 @@ def render_aging():
         fig = px.bar(t2, x=ametric, y="GRADE_CD", color="AGING", orientation="h",
                      category_orders={"AGING": AGING_ORDER, "GRADE_CD": VIP_AGING},
                      color_discrete_map=AGING_COLOR)
+        fig.update_xaxes(tickformat=",d")
         fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="에이징",
                           barmode="stack")
         plot(fig, height=380)
@@ -543,6 +541,7 @@ with c1:
     fig.add_scatter(x=fdr["LABEL"], y=fdr["승급"] - fdr["하락"], name="순이동(승급-하락)",
                     mode="lines+markers", line=dict(color="#2C3E50", width=2))
     fig.update_layout(barmode="relative", yaxis_title="명 (위=승급, 아래=하락)")
+    fig.update_yaxes(tickformat=",d")
     plot(fig, height=360)
     st.caption("막대 위=승급, 아래=하락. 검은 선=순이동. 0 근처면 승강이 균형(고착).")
 with c2:
@@ -556,6 +555,7 @@ with c2:
                 marker_color="#E67E22")
     fig.update_layout(barmode="relative", yaxis=dict(autorange="reversed"),
                       xaxis_title="명 (오른쪽=유입, 왼쪽=이탈)")
+    fig.update_xaxes(tickformat=",d")
     plot(fig, height=360)
     st.caption(f"{ymlab(msel)} 등급별 유입(+)·이탈(−). 상위→하위 순.")
 
@@ -577,8 +577,7 @@ with c2:
     gd = gd[gd.GRADE.isin(gsel)].sort_values("YM")
     fig = px.line(gd, x="LABEL", y=metric, color="GRADE", markers=True,
                   color_discrete_map=GCOLOR, category_orders={"GRADE": ORDER})
-    if metric != "순증":
-        fig.update_yaxes(tickformat=".0%")
+    fig.update_yaxes(tickformat=".0%" if metric != "순증" else ",d")
     fig.update_layout(legend_title="등급", yaxis_title=mlbl)
     plot(fig, height=380)
 insight("VIP 등급(BK·SV·GD)은 잔존율 변동이 크고, <b>RD(Red)는 ~99%</b>로 사실상 고착. "
@@ -612,8 +611,10 @@ with c2:
                     mode="lines+markers", line=dict(color="#E67E22", width=2.5),
                     yaxis="y2")
     fig.update_layout(
-        yaxis=dict(title="월 순증(명)", zeroline=True, zerolinecolor="#bbb"),
-        yaxis2=dict(title="풀 규모(명)", overlaying="y", side="right", showgrid=False))
+        yaxis=dict(title="월 순증(명)", zeroline=True, zerolinecolor="#bbb",
+                   tickformat=",d"),
+        yaxis2=dict(title="풀 규모(명)", overlaying="y", side="right",
+                    showgrid=False, tickformat=",d"))
     plot(fig, height=320)
     _s, _e = gv["당월유효"].iloc[0], gv["당월유효"].iloc[-1]
     st.caption(f"파랑=순증(+)·빨강=순감(−), 주황선=VIP core 풀 규모. "
@@ -726,6 +727,7 @@ with cc1:
                  color_discrete_map=DIRC, category_orders={"FROM": ORDER},
                  labels=dict(CNT="명", FROM="전월 등급", dir="유형"))
     fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="")
+    fig.update_xaxes(tickformat=",d")
     plot(fig, height=320)
     st.caption(f"⬆ {gsel2} 유입 출처 — 초록=하위에서 승급, 빨강=상위에서 하락")
 with cc2:
@@ -735,6 +737,7 @@ with cc2:
                  color_discrete_map=DIRC, category_orders={"TO": ORDER},
                  labels=dict(CNT="명", TO="당월 등급", dir="유형"))
     fig.update_layout(yaxis=dict(autorange="reversed"), legend_title="")
+    fig.update_xaxes(tickformat=",d")
     plot(fig, height=320)
     st.caption(f"⬇ {gsel2} 이탈 행선지 — 초록=상위로 승급, 빨강=하위로 하락")
 _net = row["순증"]
