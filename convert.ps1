@@ -3,11 +3,12 @@
 # 대시보드는 raw_grade(수불)+aging(에이징) 2개만 쓰고 나머지 지표는 앱이 직접 계산한다.
 # NOTE: 실행 문자열은 ASCII-only 유지(PS5.1이 BOM없는 .ps1을 ANSI로 읽어 한글 깨짐).
 #       시트는 한글명이 아니라 ASCII 헤더로 탐지(수불 A1='CURR_STD_YM' / 에이징 c1='YM'&c7='MAU').
-#       -Src(수불), -AgingSrc(에이징)는 호출 시 직접 전달 권장.
+#       수불·에이징이 한 파일에 있으면 -Src 만 주면 됨(-AgingSrc 생략 시 -Src 재사용).
 param(
-  [string]$Src = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\(제휴제외)VIP_등급수불_TEMPLATE_auto_v3_251215.xlsx",
-  [string]$AgingSrc = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\(제휴제외)등급수불현황 및 에이징 대시보드_업데이트_251211.xlsx"
+  [string]$Src = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\등급수불 및 에이징 raw_2605까지.xlsx",
+  [string]$AgingSrc = ""
 )
+if(-not $AgingSrc){ $AgingSrc = $Src }   # 통합 파일이면 같은 파일에서 에이징 추출
 $ErrorActionPreference = 'Stop'
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $outDir = Join-Path $here 'data'

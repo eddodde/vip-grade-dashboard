@@ -132,7 +132,8 @@ def _parse_aging_xlsx(b):
 
 
 @st.cache_data(show_spinner=False)
-def load_and_build(uploaded: bytes | None, aging_up: bytes | None):
+def load_and_build(uploaded: bytes | None):
+    # 업로드 1개 파일에 수불(등급수불 시트)·에이징(에이징 시트)이 함께 들어있음.
     df = (_parse_xlsx(uploaded) if uploaded
           else pd.read_csv(DATA / "raw_grade.csv", encoding="utf-8-sig"))
     df = df.rename(columns=RENAME)
@@ -234,7 +235,7 @@ def load_and_build(uploaded: bytes | None, aging_up: bytes | None):
     actdir["stickiness"] = actdir["DAU"] / actdir["MAU"].where(actdir["MAU"] != 0)
 
     # ── VIP 에이징(가입후 경과월) ──
-    aging = (_parse_aging_xlsx(aging_up) if aging_up
+    aging = (_parse_aging_xlsx(uploaded) if uploaded
              else pd.read_csv(DATA / "aging.csv", encoding="utf-8-sig"))
     aging = aging.rename(columns={"EFF_CNT": "유효회원수"})
     aging["YM"] = aging["YM"].astype(str).str.replace(r"\.0$", "", regex=True)
@@ -253,15 +254,13 @@ def load_and_build(uploaded: bytes | None, aging_up: bytes | None):
 with st.sidebar:
     st.header("⚙️ 설정")
     with st.expander("📤 원본 올리기 (월 갱신)", expanded=False):
-        st.caption("원본 xlsx 를 그대로 올리면 git push 없이 즉시 재계산합니다. "
-                   "(또는 convert.ps1 로 data/*.csv 갱신 후 push)")
-        up = st.file_uploader("등급수불 원본 (RAW_입력)", type=["xlsx"], key="up")
-        up_ag = st.file_uploader("VIP 에이징 원본 (2번_data)", type=["xlsx"],
-                                 key="up_ag")
+        st.caption("**수불·에이징이 함께 든 원본 xlsx 1개**를 올리면 git push 없이 "
+                   "즉시 재계산합니다. (시트: '등급수불' + '에이징'). "
+                   "또는 convert.ps1 로 data/*.csv 갱신 후 push.")
+        up = st.file_uploader("등급수불 + 에이징 원본 (xlsx)", type=["xlsx"], key="up")
 
 try:
-    B = load_and_build(up.getvalue() if up else None,
-                       up_ag.getvalue() if up_ag else None)
+    B = load_and_build(up.getvalue() if up else None)
 except Exception as e:
     st.error(f"데이터를 읽는 중 오류: {e}")
     st.stop()
