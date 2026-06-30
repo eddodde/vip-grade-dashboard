@@ -587,17 +587,31 @@ section("4 · 그래서 VIP는 자라나? — 순증·잔존",
 GC = {"VIP(SP·PT제외)": "#2C5F8A", "일반": "#E67E22"}
 c1, c2 = st.columns(2)
 with c1:
+    st.markdown("**① 잔존율 — VIP vs 일반**")
     gr = rng(group).sort_values("YM")
     fig = px.line(gr, x="LABEL", y="유지율", color="GROUP", markers=True,
                   color_discrete_map=GC)
     fig.update_yaxes(tickformat=".0%")
     fig.update_layout(legend_title="")
-    plot(fig, height=340)
+    plot(fig, height=320)
+    st.caption("VIP는 ~80%로 출렁이고 일반은 ~99%로 평탄. (잔존율=유지/전월유효)")
 with c2:
-    fig = px.bar(rng(group).sort_values("YM"), x="LABEL", y="순증", color="GROUP",
-                 barmode="group", color_discrete_map=GC)
-    fig.update_layout(legend_title="")
-    plot(fig, height=340)
+    st.markdown("**② VIP가 실제로 느나? — 월 순증(막대)·누적(선)**")
+    # VIP 순증에 집중: 부호별 색 막대 + 누적선("풀이 줄고 있나" 한눈에)
+    gv = rng(group[group.GROUP == "VIP(SP·PT제외)"]).sort_values("YM")
+    gv["누적"] = gv["순증"].cumsum()
+    bar_c = ["#C0392B" if v < 0 else "#2C5F8A" for v in gv["순증"]]
+    fig = go.Figure()
+    fig.add_bar(x=gv["LABEL"], y=gv["순증"], name="월 순증", marker_color=bar_c)
+    fig.add_scatter(x=gv["LABEL"], y=gv["누적"], name="누적 순증",
+                    mode="lines+markers", line=dict(color="#E67E22", width=2.5),
+                    yaxis="y2")
+    fig.update_layout(
+        yaxis=dict(title="월 순증(명)"),
+        yaxis2=dict(title="누적(명)", overlaying="y", side="right", showgrid=False))
+    plot(fig, height=320)
+    st.caption(f"파랑=순증(+)·빨강=순감(−), 주황선=누적. "
+               f"기간 누적 VIP 순증 {gv['순증'].sum():+,.0f}명.")
 insight("🔎 <b>진단</b> — VIP(SP·PT 제외) 유지율 ~80% vs 일반 ~99%. 이동은 활발했지만 "
         "VIP <b>순증은 거의 매월 0~마이너스</b> = 내부에서 오르내리는 게 상쇄돼 풀이 안 큽니다. "
         "순증을 만들 유일한 길은 <b>외부 유입(일반→VIP)</b>인데, 그게 되고 있을까? "
