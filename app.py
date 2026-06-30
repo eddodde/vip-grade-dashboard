@@ -707,6 +707,7 @@ with c2:
           else _rgba(GCOLOR[f], .30)
           for d, f in zip(s["dir"], s["FROM"])]
     fig = go.Figure(go.Sankey(
+        valueformat=",d", valuesuffix="명",      # 숫자 천단위 콤마(SI k/M 금지)
         node=dict(label=[f"{g}·전월" for g in ORDER] + [f"{g}·당월" for g in ORDER],
                   color=[GCOLOR[g] for g in ORDER] * 2, pad=14, thickness=16),
         link=dict(source=s["FROM"].map(L), target=s["TO"].map(R),
