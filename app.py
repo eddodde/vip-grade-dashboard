@@ -84,6 +84,11 @@ def insight(html, kind=""):
 
 
 def plot(fig, height=380, legend=True):
+    # 축 숫자를 60k 가 아니라 60,000(#,##0)으로. 기존 포맷(%,d 등)은 유지.
+    for ax in list(fig.select_xaxes()) + list(fig.select_yaxes()):
+        ax.separatethousands = True
+        if not ax.tickformat and (ax.type in (None, "linear")):
+            ax.tickformat = ",d"
     fig.update_layout(font=dict(family=KFONT), height=height,
                       margin=dict(t=30, b=10, l=10, r=10),
                       legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0)
@@ -764,9 +769,10 @@ with c2:
     fig = px.line(ad, x="LABEL", y="1인당MAU", color="dir", markers=True,
                   color_discrete_map={"승급": "#27AE60", "유지": "#2980B9",
                                       "하락": "#E74C3C"})
-    fig.update_layout(legend_title="이동")
+    fig.update_yaxes(tickformat=".0%")   # MAU/인원=월방문율(0~1)
+    fig.update_layout(legend_title="이동", yaxis_title="월 방문율(MAU/인원)")
     plot(fig, height=360)
-    st.caption("이동방향별 1인당 MAU. 하락 코호트의 활성도가 낮다면 "
+    st.caption("이동방향별 월 방문율(MAU/인원). 하락 코호트의 활성도가 낮다면 "
                "'활성 저하 → 하락' 선행지표로 활용 가능.")
 
 cor = sticky.merge(gm[["YM", "GRADE", "잔존율"]], on=["YM", "GRADE"])
