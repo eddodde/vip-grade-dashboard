@@ -596,22 +596,23 @@ with c1:
     plot(fig, height=320)
     st.caption("VIP는 ~80%로 출렁이고 일반은 ~99%로 평탄. (잔존율=유지/전월유효)")
 with c2:
-    st.markdown("**② VIP가 실제로 느나? — 월 순증(막대)·누적(선)**")
-    # VIP 순증에 집중: 부호별 색 막대 + 누적선("풀이 줄고 있나" 한눈에)
+    st.markdown("**② VIP가 실제로 느나? — 월 순증(막대)·풀 규모(선)**")
+    # 월 순증(부호색 막대) + 실제 풀 규모(당월유효) 선. 누적합은 월간 스냅샷
+    # 공백(예: 202508 이탈누락)으로 실제 풀 변화와 어긋나 오해 소지 → 풀 규모를 직접 표시.
     gv = rng(group[group.GROUP == "VIP(SP·PT제외)"]).sort_values("YM")
-    gv["누적"] = gv["순증"].cumsum()
     bar_c = ["#C0392B" if v < 0 else "#2C5F8A" for v in gv["순증"]]
     fig = go.Figure()
     fig.add_bar(x=gv["LABEL"], y=gv["순증"], name="월 순증", marker_color=bar_c)
-    fig.add_scatter(x=gv["LABEL"], y=gv["누적"], name="누적 순증",
+    fig.add_scatter(x=gv["LABEL"], y=gv["당월유효"], name="VIP core 풀(유효회원)",
                     mode="lines+markers", line=dict(color="#E67E22", width=2.5),
                     yaxis="y2")
     fig.update_layout(
-        yaxis=dict(title="월 순증(명)"),
-        yaxis2=dict(title="누적(명)", overlaying="y", side="right", showgrid=False))
+        yaxis=dict(title="월 순증(명)", zeroline=True, zerolinecolor="#bbb"),
+        yaxis2=dict(title="풀 규모(명)", overlaying="y", side="right", showgrid=False))
     plot(fig, height=320)
-    st.caption(f"파랑=순증(+)·빨강=순감(−), 주황선=누적. "
-               f"기간 누적 VIP 순증 {gv['순증'].sum():+,.0f}명.")
+    _s, _e = gv["당월유효"].iloc[0], gv["당월유효"].iloc[-1]
+    st.caption(f"파랑=순증(+)·빨강=순감(−), 주황선=VIP core 풀 규모. "
+               f"풀 {_s:,.0f} → {_e:,.0f}명 (기간 {_e-_s:+,.0f}).")
 insight("🔎 <b>진단</b> — VIP(SP·PT 제외) 유지율 ~80% vs 일반 ~99%. 이동은 활발했지만 "
         "VIP <b>순증은 거의 매월 0~마이너스</b> = 내부에서 오르내리는 게 상쇄돼 풀이 안 큽니다. "
         "순증을 만들 유일한 길은 <b>외부 유입(일반→VIP)</b>인데, 그게 되고 있을까? "
