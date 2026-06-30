@@ -355,6 +355,23 @@ def render_aging():
     risk = ashare("하락가망(12M)")
     longp = ashare("장기 유지(13M~)")
     newp = ashare("신규 유입(0~2M)")
+    # ── 판단·시사점용 구간 요약(인원·활성도, ametric 무관) ──
+    _b = (alatest.groupby("AGING")[["유효회원수", "MAU", "DAU"]].sum()
+          .reindex(AGING_ORDER).fillna(0))
+    _tot = _b["유효회원수"].sum()
+    _stick = (_b["DAU"] / _b["MAU"].where(_b["MAU"] != 0)).fillna(0)   # 방문빈도
+    _maur = (_b["MAU"] / _b["유효회원수"].where(_b["유효회원수"] != 0)).fillna(0)  # 월방문율
+    LONG, RISK = "장기 유지(13M~)", "하락가망(12M)"
+    share_long = _b["유효회원수"][LONG] / _tot if _tot else 0
+    risk_cnt = _b["유효회원수"][RISK]
+    risk_act = _maur[RISK]
+    valley = _stick.drop(LONG).idxmin() if _tot else "온보딩(3~5M)"   # 활성 최저 구간
+    valley_s = _stick[valley] if _tot else 0
+    mid_act = _maur[["온보딩(3~5M)", "안정화(6~11M)"]].mean()
+    _rs = ag[ag.AGING == RISK].groupby("YM")["유효회원수"].sum().sort_index()
+    risk_dir = ("줄어드는" if len(_rs) >= 2 and _rs.iloc[-1] < _rs.iloc[0]
+                else ("늘어나는" if len(_rs) >= 2 and _rs.iloc[-1] > _rs.iloc[0]
+                      else "비슷한"))
     with ac2:
         kk = st.columns(4)
         metric_card(kk[0], f"VIP {ametric} 합", f"{atot:,.0f}",
@@ -364,9 +381,14 @@ def render_aging():
         metric_card(kk[2], "장기유지(13M~) 비중", f"{longp*100:.1f}%", "로열티 高")
         metric_card(kk[3], "신규유입(0~2M) 비중", f"{newp*100:.1f}%",
                     "정착 전·이탈 가능")
-    insight(f"{ymlab(ym1)} 선택 VIP의 <b>{longp*100:.0f}%가 장기유지(13M~)</b>로 충성 기반은 "
-            f"두텁지만, <b>하락가망(12M) {risk*100:.0f}%</b>는 최초 구매실적이 만료돼 "
-            "다음 달 하락 위험이 가장 큰 구간입니다 — 이 코호트 집중 리텐션이 핵심.", "warn")
+    _valley_note = ("진입 직후 높던 방문이 이 시기에 식는 '온보딩 밸리'입니다"
+                    if valley.startswith("온보딩")
+                    else "이 시기에 방문이 가장 가라앉습니다")
+    insight(
+        f"📌 <b>현황 판단</b> — {ymlab(ym1)} 선택 VIP {_tot:,.0f}명 중 "
+        f"<b>장기유지(13M~)가 {share_long*100:.0f}%</b>로 충성 기반은 탄탄합니다. "
+        f"다만 방문빈도(Stickiness)는 <b>{valley} 구간에서 최저({valley_s*100:.0f}%)</b> — "
+        f"{_valley_note}. 하락가망(12M)은 {risk_cnt:,.0f}명으로 {risk_dir} 추세입니다.")
 
     section("구간 구성 추세", "월별로 에이징 구간 비중이 어떻게 변하는지 (코호트 이동)",
             anchor="sec-aging-mix")
@@ -414,9 +436,18 @@ def render_aging():
     fig.update_yaxes(tickformat=".0%")
     fig.update_layout(legend_title="에이징")
     plot(fig, height=360)
-    insight("Stickiness(DAU/MAU)가 <b>신규유입 &lt; 장기유지</b>로 벌어진다면, 막 진입한 "
-            "VIP가 아직 방문 습관이 안 잡혔다는 뜻 — 온보딩(3~5M) 단계의 혜택·푸시를 "
-            "강화해 활성도를 끌어올리면 이후 하락가망 구간의 이탈을 줄일 수 있습니다.")
+    _save = ("오히려 높습니다" if risk_act >= mid_act else "낮지 않습니다")
+    insight(
+        "🎯 <b>시사점 · 해야 할 일</b><br>"
+        f"① <b>하락가망(12M) {risk_cnt:,.0f}명 — 재구매 유도로 등급 방어(ROI 핀포인트).</b> "
+        f"이들의 월방문율 {risk_act*100:.0f}%로 온보딩·안정화 평균({mid_act*100:.0f}%)보다 {_save} "
+        "— 즉 <b>앱은 잘 쓰는데 재구매 요건만 못 채워</b> 떨어질 위험입니다. 활성 고객이라 "
+        "타깃 쿠폰·리마인드 한 번으로 살릴 여지가 큽니다.<br>"
+        f"② <b>활성 최저 '{valley}' 구간({valley_s*100:.0f}%) 온보딩 강화.</b> "
+        "진입 직후 방문이 식기 전 이 시기에 혜택·푸시를 집중해 방문 습관을 굳히면, "
+        "이후 안정화→장기유지로 넘어가는 전환을 늘리고 하락가망으로 새는 인원을 줄입니다.<br>"
+        f"③ <b>장기유지 {share_long*100:.0f}% 기반 유지.</b> 충성층 혜택을 지키되, "
+        "신규유입→온보딩 누수를 막아 장기유지 풀을 키우는 게 순증의 핵심.", "warn")
     # 실제 결측 월만 자동 안내(원본에 채워지면 사라짐)
     _agy = set(aging["YM"])
     _miss = [m for m in YMS if ym0 <= m <= ym1 and m not in _agy]
