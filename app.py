@@ -496,32 +496,36 @@ def render_integrated():
 
     # ── 1) VIP 풀(수불) vs 에이징 구성 ──
     section("1 · 풀은 정체인데, 속은 늙고 있다",
-            "막대 높이=VIP 풀(명), 막대 안 색=에이징 구성. 풀 규모와 신규유입·장기유지 비중을 "
-            "한 막대에서 본다. (구성비로 보기 토글 제공)",
+            "VIP 풀 규모(막대, 명)와 에이징 구성(장기유지·신규유입 비중, 선)을 겹쳐 본다.",
             anchor="sec-int-pool")
-    ar = aging[(aging.YM >= ym0) & (aging.YM <= ym1)].copy()
-    inorm = st.checkbox("구성비(100%)로 보기", value=False, key="int_norm")
-    t = ar.groupby(["YM", "LABEL", "AGING"], as_index=False)["유효회원수"].sum()
-    if inorm:
-        t["_tot"] = t.groupby("YM")["유효회원수"].transform("sum")
-        t["val"] = t["유효회원수"] / t["_tot"].where(t["_tot"] != 0)
-    else:
-        t["val"] = t["유효회원수"]
-    fig = px.bar(t.sort_values("YM"), x="LABEL", y="val", color="AGING",
-                 category_orders={"AGING": AGING_ORDER}, color_discrete_map=AGING_COLOR)
-    fig.update_layout(barmode="stack", legend_title="에이징",
-                      yaxis_title="구성비" if inorm else "VIP 풀(명)")
-    fig.update_yaxes(tickformat=".0%" if inorm else ",d")
-    plot(fig, height=400)
-    # 진단용 풀·비중(시작/끝)
-    _tt = ar.groupby("YM")["유효회원수"].sum().sort_index()
-    _ls = (ar[ar.AGING == "장기 유지(13M~)"].groupby("YM")["유효회원수"].sum()
-           / _tt).sort_index()
-    _ns = (ar[ar.AGING == "신규 유입(0~2M)"].groupby("YM")["유효회원수"].sum()
-           / _tt).sort_index()
-    _p0, _p1 = _tt.iloc[0], _tt.iloc[-1]
-    _l0, _l1 = _ls.iloc[0], _ls.iloc[-1]
-    _n0, _n1 = _ns.iloc[0], _ns.iloc[-1]
+    vp = gm[gm.GRADE.isin(VIP_ALL)].groupby("YM", as_index=False)["당월유효"].sum()
+    tot = aging.groupby("YM")["유효회원수"].sum()
+
+    def _share(bucket):
+        return aging[aging.AGING == bucket].groupby("YM")["유효회원수"].sum() / tot
+    m = vp.copy()
+    m["LABEL"] = m["YM"].map(ymlab)
+    m["long"] = m["YM"].map(_share("장기 유지(13M~)"))
+    m["new"] = m["YM"].map(_share("신규 유입(0~2M)"))
+    m = m[(m.YM >= ym0) & (m.YM <= ym1)].sort_values("YM")
+    fig = go.Figure()
+    fig.add_bar(x=m["LABEL"], y=m["당월유효"], name="VIP 풀(명)",
+                marker_color="rgba(44,95,138,.25)")
+    fig.add_scatter(x=m["LABEL"], y=m["long"], name="장기유지 비중",
+                    mode="lines+markers", line=dict(color="#2C3E50", width=2.5),
+                    yaxis="y2")
+    fig.add_scatter(x=m["LABEL"], y=m["new"], name="신규유입 비중",
+                    mode="lines+markers", line=dict(color="#3498DB", width=2.5),
+                    yaxis="y2")
+    fig.update_layout(
+        yaxis=dict(title="VIP 풀(명)", tickformat=",d"),
+        yaxis2=dict(title="구성 비중", overlaying="y", side="right",
+                    tickformat=".0%", showgrid=False, rangemode="tozero"),
+        legend=dict(orientation="h", y=1.0, x=0))
+    plot(fig, height=380)
+    _p0, _p1 = m["당월유효"].iloc[0], m["당월유효"].iloc[-1]
+    _l0, _l1 = m["long"].iloc[0], m["long"].iloc[-1]
+    _n0, _n1 = m["new"].iloc[0], m["new"].iloc[-1]
     insight(
         f"🔎 <b>진단</b> — 풀은 {_p0:,.0f} → {_p1:,.0f}명으로 <b>거의 정체</b>인데, "
         f"안에서는 <b>장기유지 비중이 {_l0*100:.0f}% → {_l1*100:.0f}%로 오르고 "
