@@ -271,14 +271,14 @@ aging = B["aging"]
 
 PAGES = {
     "📊 수불 현황": [
-        ("sec-summary", "핵심 요약"),
-        ("sec-flow", "수불 한눈에 (승급·유지·하락)"),
-        ("sec-grade", "등급별 수불 추세"),
-        ("sec-group", "VIP vs 일반"),
-        ("sec-conv", "일반→VIP 전환 & 내부 대사"),
-        ("sec-matrix", "이동 방향성 (From→To)"),
-        ("sec-detail", "등급별 수불 상세"),
-        ("sec-activity", "DAU/MAU 활성도"),
+        ("sec-summary", "1 · 현황 한눈에"),
+        ("sec-flow", "2 · 이동은 활발한가(승급·유지·하락)"),
+        ("sec-grade", "3 · 등급별 잔존·이탈"),
+        ("sec-group", "4 · VIP는 자라나(순증)"),
+        ("sec-conv", "5 · 핵심 병목(일반→VIP)"),
+        ("sec-matrix", "6 · 심화: 어디서 어디로"),
+        ("sec-detail", "7 · 심화: 등급 분해"),
+        ("sec-activity", "8 · 보조: DAU/MAU 활성도"),
     ],
     "⏳ VIP 에이징": [
         ("sec-aging", "에이징 분포 개요"),
@@ -484,8 +484,15 @@ if not page.startswith("📊"):      # 에이징 페이지 → 렌더 후 종료
     render_aging()
     st.stop()
 
-# ════════ 핵심 요약 ════════
-section("핵심 요약", f"최신월 {ymlab(ym1)} 기준 · VIP 유지율은 SP·PT 제외",
+insight(
+    "🧭 <b>이 페이지의 흐름 — \"이동은 활발한데 왜 VIP는 안 늘어나는가?\"</b><br>"
+    "① 현황 → ② 등급 이동이 활발한지(승급·유지·하락) → ③ 등급별 잔존·이탈 → "
+    "④ <b>그래도 VIP 순증이 나는지</b> → ⑤ 안 난다면 <b>유입 병목(일반→VIP)은 어디인지</b> "
+    "→ ⑥·⑦ 심화(어디서 어디로·등급 분해) → ⑧ 활성도 보조단서, 순으로 진단합니다.")
+
+# ════════ 1 현황 ════════
+section("1 · 현황 한눈에",
+        f"최신월 {ymlab(ym1)} 기준 VIP/일반 핵심 지표. VIP 유지율은 연1회 고정 SP·PT 제외.",
         anchor="sec-summary")
 gV = group[(group.GROUP == "VIP(SP·PT제외)") & (group.YM == ym1)]
 gN = group[(group.GROUP == "일반") & (group.YM == ym1)]
@@ -508,7 +515,7 @@ metric_card(k[4], "이번달 승급 / 하락",
             if len(fd) else "—", "명")
 
 # ════════ 수불 한눈에 ════════
-section("수불 한눈에 — 승급 · 유지 · 하락",
+section("2 · 등급 이동은 활발한가 — 승급 · 유지 · 하락",
         "이번 기간 전체에서 등급을 올린 사람(승급)·내린 사람(하락)이 얼마나 되는지, "
         "그리고 등급별로 들어오고(유입) 빠지는(이탈) 균형을 한눈에.",
         anchor="sec-flow")
@@ -518,10 +525,10 @@ how_to("• <b>왼쪽</b>: 월별로 <b>위 막대=승급 인원, 아래 막대=
        "막대가 오른쪽으로 길면 그 등급은 순증, 왼쪽으로 길면 순감.")
 _fr = rng(flowdir)
 _up, _dn = _fr["승급"].sum(), _fr["하락"].sum()
-insight(f"기간 누적 <b>승급 {_up:,.0f}명 · 하락 {_dn:,.0f}명</b> "
-        f"(순 {_up-_dn:+,.0f}). 승급과 하락이 비슷하게 맞물려 돌면 등급 구조가 "
-        "<b>고착</b>(올라가는 만큼 내려옴)됐다는 신호 — 순증을 만들려면 외부 유입(일반→VIP) "
-        "또는 하락 방어가 필요합니다.")
+insight(f"🔎 <b>진단</b> — 기간 누적 <b>승급 {_up:,.0f} · 하락 {_dn:,.0f}명</b> "
+        f"(순 {_up-_dn:+,.0f}). 이동량은 큰데 승급과 하락이 거의 맞물려 돌아 등급 구조가 "
+        "<b>고착</b>(올라가는 만큼 내려옴)에 가깝습니다. <b>→ 그렇다면 이 활발한 이동이 정작 "
+        "VIP 순증으로 이어질까? ④에서 확인합니다.</b>")
 c1, c2 = st.columns([3, 2])
 with c1:
     fdr = rng(flowdir).sort_values("YM")
@@ -548,8 +555,9 @@ with c2:
     st.caption(f"{ymlab(msel)} 등급별 유입(+)·이탈(−). 상위→하위 순.")
 
 # ════════ 등급별 수불 추세 ════════
-section("등급별 수불 추세",
-        "잔존율=유지/전월유효 · 구성비=유지·유입/당월 유효회원 · 이탈률=이탈/전월유효 (양식 정의)",
+section("3 · 등급별 잔존·이탈 추세",
+        "어느 등급이 잘 남고 잘 빠지나. 잔존율=유지/전월유효 · 구성비=유지·유입/당월유효 "
+        "· 이탈률=이탈/전월유효 (양식 정의)",
         anchor="sec-grade")
 METRICS = {"잔존율(전월대비)": "잔존율", "유지 구성비": "유지구성",
            "유입 구성비": "유입구성", "이탈률": "이탈률", "순증(명)": "순증"}
@@ -572,7 +580,9 @@ insight("VIP 등급(BK·SV·GD)은 잔존율 변동이 크고, <b>RD(Red)는 ~99
         "SP·PT는 연1회 고정등급이라 월 단위 잔존율 해석에서 제외했습니다.")
 
 # ════════ VIP vs 일반 ════════
-section("VIP vs 일반 잔존력", "VIP는 SP·PT 제외(BK·SV·GD). 유지율·순증 비교",
+section("4 · 그래서 VIP는 자라나? — 순증·잔존",
+        "②③에서 이동은 활발했는데, 그 결과 VIP 풀이 실제로 느는지(순증) 본다. "
+        "VIP는 SP·PT 제외(BK·SV·GD).",
         anchor="sec-group")
 GC = {"VIP(SP·PT제외)": "#2C5F8A", "일반": "#E67E22"}
 c1, c2 = st.columns(2)
@@ -588,12 +598,15 @@ with c2:
                  barmode="group", color_discrete_map=GC)
     fig.update_layout(legend_title="")
     plot(fig, height=340)
-insight("VIP(SP·PT 제외) 유지율 ~80% vs 일반 ~99%. VIP는 구조적으로 변동성이 크고 "
-        "순증이 거의 매월 마이너스 — <b>유입 강화가 없으면 자연 감소</b>.", "warn")
+insight("🔎 <b>진단</b> — VIP(SP·PT 제외) 유지율 ~80% vs 일반 ~99%. 이동은 활발했지만 "
+        "VIP <b>순증은 거의 매월 0~마이너스</b> = 내부에서 오르내리는 게 상쇄돼 풀이 안 큽니다. "
+        "순증을 만들 유일한 길은 <b>외부 유입(일반→VIP)</b>인데, 그게 되고 있을까? "
+        "<b>→ ⑤에서 병목을 확인합니다.</b>", "warn")
 
 # ════════ 전환 & 내부 대사 ════════
-section("일반→VIP 전환 & 일반 내부 대사",
-        "일반 고객이 VIP로 올라오는 비율 vs 일반(RD·PP) 안에서만 도는 비율",
+section("5 · 핵심 병목 — 일반→VIP 유입",
+        "④에서 VIP 순증이 안 났다면, 외부 유입원인 '일반→VIP'가 막혔다는 뜻. "
+        "전환율 vs 일반(RD·PP) 내부 순환 비중으로 병목을 확인한다.",
         anchor="sec-conv")
 cd = rng(conv).sort_values("YM")
 fig = go.Figure()
@@ -608,14 +621,16 @@ fig.update_layout(
     legend=dict(orientation="h", y=1.1))
 plot(fig, height=360, legend=False)
 avg_conv = conv["전환율"].mean()
-insight(f"일반 고객의 <b>약 {conv['대사비중'].mean()*100:.1f}%가 RD↔PP 내부에서만</b> "
-        f"순환하고, VIP로 올라오는 전환율은 평균 <b>{avg_conv*100:.2f}%</b>에 불과 — "
-        "핵심 Pain Point. 일반 상위(PP)를 겨냥한 승급 부스팅 장치가 필요합니다.", "warn")
+insight(f"🎯 <b>결론(병목)</b> — 일반 고객의 <b>약 {conv['대사비중'].mean()*100:.1f}%가 "
+        f"RD↔PP 내부에서만</b> 순환하고, VIP로 올라오는 전환율은 평균 "
+        f"<b>{avg_conv*100:.2f}%</b>에 불과합니다. 즉 ②③의 활발한 이동도, ④의 VIP 정체도 "
+        "결국 <b>여기서 외부 유입이 막힌 탓</b> — <b>일반 상위(PP)를 겨냥한 승급 부스팅이 "
+        "VIP 순증의 가장 큰 레버</b>입니다. (어느 등급을 건드릴지는 ⑥·⑦에서 구체화)", "warn")
 
 # ════════ 이동 방향성 ════════
-section("이동 방향성 (From → To)",
-        "선택한 달에 전월 등급 → 당월 등급으로 사람들이 어떻게 옮겨갔는지. "
-        "유지(같은 등급) 제외하면 '이동'만 보입니다.",
+section("6 · 심화: 어디서 어디로 (From → To)",
+        "①~⑤로 큰 그림을 봤다면, 여기서부터는 드릴다운. 선택한 달에 전월 등급 → 당월 "
+        "등급으로 어떻게 옮겨갔는지. 유지(같은 등급) 제외하면 '이동'만 보입니다.",
         anchor="sec-matrix")
 mm = st.select_slider("기준월", options=YMS, value=ym1, format_func=ymlab,
                       key="mxm")
@@ -664,7 +679,7 @@ with c2:
     st.caption("좌=전월, 우=당월. 초록=승급, 빨강=하락 흐름.")
 
 # ── 등급별 수불 상세 (양식 정의) ──
-section("등급별 수불 상세",
+section("7 · 심화: 등급 단위 수불 분해",
         "한 등급을 골라 그 달의 유효회원이 어떻게 구성됐는지 — "
         "유지·유입(승급/하락)·이탈(승급/하락)을 양식 정의대로 분해해 봅니다.",
         anchor="sec-detail")
@@ -714,8 +729,9 @@ insight(
     "ok" if _net >= 0 else "warn")
 
 # ════════ DAU/MAU 활성도 ════════
-section("DAU/MAU 활성도 교차",
-        "RAW의 MAU/DAU를 등급·이동방향과 교차. Stickiness=DAU/MAU(높을수록 자주 방문).",
+section("8 · 보조 단서: DAU/MAU 활성도",
+        "RAW의 MAU/DAU를 등급·이동방향과 교차. 활성도가 잔존·승강과 어떻게 맞물리는지 "
+        "보조 단서. Stickiness=DAU/MAU(높을수록 자주 방문).",
         anchor="sec-activity")
 c1, c2 = st.columns(2)
 with c1:
