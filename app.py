@@ -417,7 +417,12 @@ def render_aging():
     insight("Stickiness(DAU/MAU)가 <b>신규유입 &lt; 장기유지</b>로 벌어진다면, 막 진입한 "
             "VIP가 아직 방문 습관이 안 잡혔다는 뜻 — 온보딩(3~5M) 단계의 혜택·푸시를 "
             "강화해 활성도를 끌어올리면 이후 하락가망 구간의 이탈을 줄일 수 있습니다.")
-    st.caption("ⓘ 에이징 원본에 202505월이 누락되어 해당 월은 비어 있습니다.")
+    # 실제 결측 월만 자동 안내(원본에 채워지면 사라짐)
+    _agy = set(aging["YM"])
+    _miss = [m for m in YMS if ym0 <= m <= ym1 and m not in _agy]
+    if _miss:
+        st.caption("ⓘ 에이징 원본에 " + ", ".join(ymlab(m) for m in _miss)
+                   + " 데이터가 없어 해당 월은 비어 있습니다.")
 
 
 st.title("📊 VIP 등급 수불 대시보드")
