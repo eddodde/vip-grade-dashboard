@@ -36,9 +36,9 @@ glabel = {g: f"{g} {NAME[g]}" for g in ORDER}
 VIP_AGING = ["SP", "PT", "GD", "SV", "BK"]   # 에이징은 VIP 등급만(상→하)
 AGING_ORDER = ["신규 유입(0~2M)", "온보딩(3~5M)", "안정화(6~11M)",
                "하락가망(12M)", "장기 유지(13M~)"]
-AGING_COLOR = {"신규 유입(0~2M)": "#5DADE2", "온보딩(3~5M)": "#48C9B0",
-               "안정화(6~11M)": "#58D68D", "하락가망(12M)": "#E67E22",
-               "장기 유지(13M~)": "#34495E"}
+AGING_COLOR = {"신규 유입(0~2M)": "#3498DB", "온보딩(3~5M)": "#9B59B6",
+               "안정화(6~11M)": "#27AE60", "하락가망(12M)": "#E67E22",
+               "장기 유지(13M~)": "#2C3E50"}
 DIRCOLOR = {"승급": "#27AE60", "하락": "#E74C3C", "유지": "#95A5A6"}
 
 st.markdown("""
@@ -401,10 +401,11 @@ def render_aging():
 
     section("구간 구성 추세", "월별로 에이징 구간 비중이 어떻게 변하는지 (코호트 이동)",
             anchor="sec-aging-mix")
-    how_to("• <b>왼쪽(누적 막대)</b>: 한 달의 100%를 5개 구간이 나눠 가짐 — "
-           "신규유입(밝은 파랑)→장기유지(짙은 남색) 순으로 쌓임.<br>"
+    how_to("• <b>색</b>: 신규유입=파랑, 온보딩=보라, 안정화=초록, 하락가망=주황, "
+           "장기유지=남색.<br>"
+           "• <b>왼쪽(누적 막대)</b>: 한 달의 100%를 5개 구간이 나눠 가짐.<br>"
            "• <b>오른쪽</b>: 선택월의 <b>등급별</b> 구간 구성. 막대 길이=인원.<br>"
-           "• 하락가망(주황)·신규유입(하늘) 비중이 커지면 향후 하락 압력 신호.")
+           "• 하락가망(주황)·신규유입(파랑) 비중이 커지면 향후 하락 압력 신호.")
     c1, c2 = st.columns(2)
     with c1:
         anorm = st.checkbox("구성비(100%)로 보기", value=True, key="agnorm")
@@ -440,8 +441,9 @@ def render_aging():
     t3 = ag.groupby(["YM", "LABEL", "AGING"], as_index=False)[["DAU", "MAU"]].sum()
     t3["stickiness"] = t3["DAU"] / t3["MAU"].where(t3["MAU"] != 0)
     fig = px.line(t3.sort_values("YM"), x="LABEL", y="stickiness", color="AGING",
-                  markers=True, category_orders={"AGING": AGING_ORDER},
+                  markers=True, symbol="AGING", category_orders={"AGING": AGING_ORDER},
                   color_discrete_map=AGING_COLOR)
+    fig.update_traces(line=dict(width=2.5), marker=dict(size=7))
     fig.update_yaxes(tickformat=".0%")
     fig.update_layout(legend_title="에이징")
     plot(fig, height=360)
