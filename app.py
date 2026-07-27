@@ -342,8 +342,9 @@ with st.sidebar:
                             unsafe_allow_html=True)
     page = active
     st.markdown("#### 🔎 기간")
+    # key에 데이터 최신월 포함 → 데이터가 갱신되면 슬라이더가 최신 범위로 자동 리셋
     ym0, ym1 = st.select_slider("기간(월)", options=YMS, value=(YMS[0], YMS[-1]),
-                                format_func=ymlab)
+                                format_func=ymlab, key=f"period_{YMS[0]}_{YMS[-1]}")
     src = "업로드 원본" if up else "커밋된 data/raw_grade.csv"
     st.caption(f"데이터 출처: **{src}** · {len(YMS)}개월")
     st.caption("등급(상→하): SP·PT·GD·SV·BK(=VIP) / PP·RD(=일반). "
@@ -728,7 +729,7 @@ with c1:
     st.caption("막대 위=승급, 아래=하락. 검은 선=순이동. 0 근처면 승강이 균형(고착).")
 with c2:
     msel = st.select_slider("등급 밸런스 기준월", options=YMS, value=ym1,
-                            format_func=ymlab, key="balm")
+                            format_func=ymlab, key=f"balm_{YMS[-1]}")
     gmm = gm[gm.YM == msel].set_index("GRADE").reindex(ORDER)
     fig = go.Figure()
     fig.add_bar(y=gmm.index, x=gmm["유입"], name="유입", orientation="h",
@@ -842,7 +843,7 @@ section("6 · 심화: 어디서 어디로 (From → To)",
         "등급으로 어떻게 옮겨갔는지(전체 등급). Sankey는 '유지 포함' 토글 제공.",
         anchor="sec-matrix")
 mm = st.select_slider("기준월", options=YMS, value=ym1, format_func=ymlab,
-                      key="mxm")
+                      key=f"mxm_{YMS[-1]}")
 mx = mat[mat.YM == mm]
 how_to("두 차트 모두 같은 데이터(전월→당월 이동)를 보여줍니다(전체 등급).<br>"
        "• <b>왼쪽 히트맵</b>: <b>행=전월, 열=당월</b>. 칸 숫자=이동 인원, 색 진할수록 많음. "
