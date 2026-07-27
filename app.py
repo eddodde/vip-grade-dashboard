@@ -315,8 +315,9 @@ PAGES = {
     ],
     "🔗 통합 진단": [
         ("sec-int-pool", "1 · 풀은 정체인데 속은?"),
-        ("sec-int-score", "2 · 등급 건강 스코어카드"),
-        ("sec-int-act", "3 · 통합 결론·시사점"),
+        ("sec-int-dau", "2 · DAU 역설"),
+        ("sec-int-score", "3 · 등급 건강 스코어카드"),
+        ("sec-int-act", "4 · 통합 결론·CRM 액션"),
     ],
 }
 active = st.session_state.setdefault("page", list(PAGES)[0])
@@ -512,8 +513,9 @@ def render_aging():
 def render_integrated():
     insight(
         "🧭 <b>왜 합쳐 보나</b> — 수불은 '풀이 왜 변하나(유입·이탈)', 에이징은 '풀의 질·나이"
-        "(신참 vs 충성층)'를 말합니다. 둘을 겹치면 <b>풀 정체의 진짜 이유</b>가 드러납니다. "
-        "① 풀 vs 구성 → ② 등급 건강 스코어카드 → ③ 통합 결론.")
+        "(신참 vs 충성층)'를 말합니다. 둘을 겹치면 <b>풀 정체의 진짜 이유</b>와 "
+        "<b>DAU 역신장의 원인</b>이 드러납니다. "
+        "① 풀 vs 구성 → ② DAU 역설 → ③ 등급 스코어카드 → ④ 통합 결론·액션.")
 
     # ── 1) VIP 풀(수불) vs 에이징 구성 ──
     section("1 · 풀은 정체인데, 속은 늙고 있다",
@@ -555,8 +557,52 @@ def render_integrated():
         "'일반→VIP 유입 병목'이 에이징에선 '신규 비중 감소'로 나타난 같은 현상입니다.",
         "warn")
 
-    # ── 2) 등급 건강 스코어카드 ──
-    section("2 · 등급 건강 스코어카드",
+    # ── 2) DAU 역설 ──
+    section("2 · DAU 역설 — 충성층은 많은데 왜 DAU가 빠지나",
+            "VIP DAU를 에이징 구간으로 분해. '등급 유지(머릿수)'와 '방문빈도(DAU)'는 다른 얘기.",
+            anchor="sec-int-dau")
+    ard = aging[(aging.YM >= ym0) & (aging.YM <= ym1)].copy()
+    d1, d2 = st.columns(2)
+    with d1:
+        st.markdown("**① VIP DAU 추세 (구간별 누적)**")
+        dd = ard.groupby(["YM", "LABEL", "AGING"], as_index=False)["DAU"].sum()
+        fig = px.bar(dd.sort_values("YM"), x="LABEL", y="DAU", color="AGING",
+                     category_orders={"AGING": AGING_ORDER},
+                     color_discrete_map=AGING_COLOR)
+        fig.update_layout(barmode="stack", legend_title="에이징", yaxis_title="DAU(명)")
+        fig.update_yaxes(tickformat=",d")
+        plot(fig, height=340)
+        st.caption("막대 높이=VIP 총 DAU. 장기유지(남색)가 대부분인데 총량은 우하향.")
+    with d2:
+        st.markdown("**② 구간별 1인당 DAU(방문빈도) 추세**")
+        pc = ard.groupby(["YM", "LABEL", "AGING"],
+                         as_index=False)[["DAU", "유효회원수"]].sum()
+        pc["percap"] = pc["DAU"] / pc["유효회원수"].where(pc["유효회원수"] != 0)
+        fig = px.line(pc.sort_values("YM"), x="LABEL", y="percap", color="AGING",
+                      markers=True, category_orders={"AGING": AGING_ORDER},
+                      color_discrete_map=AGING_COLOR)
+        fig.update_yaxes(tickformat=".0%")
+        fig.update_layout(legend_title="에이징", yaxis_title="1인당 DAU(일 방문율)")
+        plot(fig, height=340)
+        st.caption("1인당 DAU=DAU/인원. 장기유지도 우하향 = 충성층이 예전만큼 자주 안 옴.")
+    _lg = ard[ard.AGING == "장기 유지(13M~)"].groupby("YM")[["DAU", "유효회원수"]].sum()
+    _lt = (_lg["DAU"] / _lg["유효회원수"]).sort_index()
+    _td = ard.groupby("YM")["DAU"].sum().sort_index()
+    insight(
+        f"🔎 <b>역설 해소</b> — VIP DAU는 {_td.iloc[0]:,.0f} → {_td.iloc[-1]:,.0f}명으로 "
+        "<b>역신장</b>인데 충성층 머릿수는 오히려 늘었습니다. 이유는 "
+        f"<b>장기유지의 1인당 방문빈도가 {_lt.iloc[0]*100:.0f}% → {_lt.iloc[-1]*100:.0f}%로 "
+        "하락</b>(등급은 유지해도 방문은 식는 '활동성 노화'). 즉 <b>DAU는 머릿수가 아니라 "
+        "방문빈도의 문제</b>이고, 활발한 신규유입 DAU까지 줄어(유입 병목) 이중으로 빠집니다.",
+        "warn")
+    insight(
+        "🎯 <b>DAU 레버</b> — 충성층은 <b>머릿수가 커서 재활성화 대상 풀이 큽니다</b>. "
+        "1인당 방문을 조금만 올려도 DAU가 크게 개선(예: 장기유지 ~38k × +5%p ≈ +1,900 DAU). "
+        "<b>등급 방어(수불)만으론 DAU를 못 살립니다</b> — 장기유지 재참여(리텐션 콘텐츠·핫딜·"
+        "앱 푸시) + 신규 확보가 DAU 회복의 두 축.")
+
+    # ── 3) 등급 건강 스코어카드 ──
+    section("3 · 등급 건강 스코어카드",
             f"{ymlab(ym1)} VIP 등급별로 '회전(수불)'과 '나이(에이징)'를 한 줄에 — "
             "어느 등급이 불안정/고령인지 한눈에.",
             anchor="sec-int-score")
@@ -600,8 +646,8 @@ def render_integrated():
     st.caption("좌=수불(풀·순증·잔존율) · 우=에이징(신규·하락가망·장기유지). "
                "BK/SV 같은 입구 등급일수록 회전이 빠르고, 상위로 갈수록 안정·고령.")
 
-    # ── 3) 통합 결론 · CRM 액션 ──
-    section("3 · 통합 결론 · CRM 액션 플랜",
+    # ── 4) 통합 결론 · CRM 액션 ──
+    section("4 · 통합 결론 · CRM 액션 플랜",
             "무엇이(현상) → 왜(원인) → 그래서(리스크) → 무엇을(CRM 액션)",
             anchor="sec-int-act")
     st.markdown(
@@ -612,8 +658,9 @@ def render_integrated():
     cc[0].markdown(
         '<div class="ccard now"><span class="t">현상 What</span><ul>'
         '<li>VIP 풀 <b>~62k 정체</b> (순증 ≈ 0)</li>'
-        '<li>장기유지 비중 <b>57%→62% ↑</b></li>'
-        '<li>신규유입 비중 <b>얇아짐</b></li></ul></div>', unsafe_allow_html=True)
+        '<li>장기유지 비중 <b>57%→62% ↑</b>인데</li>'
+        '<li>VIP <b>DAU 역신장</b> · 1인당 방문빈도 ↓</li></ul></div>',
+        unsafe_allow_html=True)
     cc[1].markdown(
         '<div class="ccard why"><span class="t">원인 Why</span><ul>'
         '<li><b>유입 병목</b> — 일반→VIP 전환 0.2%대</li>'
@@ -635,9 +682,9 @@ def render_integrated():
         ("③ 상시", "하락가망 12M (재구매 없는 층)",
          "등급 만료 D-30 리마인드 + 재구매 인센티브 (구매 데이터로 무재구매자 타겟팅)",
          "하락 방어 (활성 고객이라 반응 여지 큼)"),
-        ("④ 모니터", "장기유지 13M+ 충성층",
-         "핵심 혜택 유지 + 활성도(MAU/DAU) 하락 시 조기경보 세그먼트 운영",
-         "풀 붕괴 예방 (이탈 선제 대응)"),
+        ("④ 재활성화", "장기유지 13M+ 충성층 (머릿수 큼)",
+         "방문빈도 하락층에 리텐션 콘텐츠·핫딜·앱 푸시로 재참여 유도 + 활성 하락 조기경보",
+         "DAU 회복 (1인당 방문 +5%p ≈ +1,900) · 이탈 선제 방어"),
     ]
     _arows = "".join(
         f"<tr><td class='pri'>{p}</td><td class='seg'>{s}</td>"
@@ -646,8 +693,8 @@ def render_integrated():
         "<table class='atbl'><thead><tr><th>우선순위</th><th>타겟 세그먼트</th>"
         "<th>CRM 액션</th><th>기대효과</th></tr></thead>"
         f"<tbody>{_arows}</tbody></table>", unsafe_allow_html=True)
-    st.caption("①②=신규 확보·정착(VIP 순증의 두 핵심 레버) · ③④=기존 풀 방어. "
-               "②③은 구매 데이터와 결합하면 타겟 정밀도가 올라갑니다.")
+    st.caption("①②=신규 확보·정착(VIP 순증 레버) · ③=하락 방어 · ④=DAU 회복(재활성화). "
+               "순증(수불)과 DAU(활동성)는 다른 문제 — ④가 DAU 역신장의 직접 레버입니다.")
 
 
 st.title("📊 VIP 등급 수불 대시보드")
