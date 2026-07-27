@@ -1,11 +1,12 @@
-# VIP 등급수불/에이징 원본 xlsx -> data/raw_grade.csv, data/aging.csv
+﻿# VIP 등급수불/에이징 원본 xlsx -> data/raw_grade.csv, data/aging.csv
 # 원본은 DRM-free(PK 헤더). Excel COM 으로 Value2 읽어 .NET 으로 UTF-8(BOM) CSV 작성.
 # 대시보드는 raw_grade(수불)+aging(에이징) 2개만 쓰고 나머지 지표는 앱이 직접 계산한다.
 # NOTE: 실행 문자열은 ASCII-only 유지(PS5.1이 BOM없는 .ps1을 ANSI로 읽어 한글 깨짐).
 #       시트는 한글명이 아니라 ASCII 헤더로 탐지(수불 A1='CURR_STD_YM' / 에이징 c1='YM'&c7='MAU').
 #       수불·에이징이 한 파일에 있으면 -Src 만 주면 됨(-AgingSrc 생략 시 -Src 재사용).
+#       ★ 매월 갱신: 아래 고정파일에 최신본을 덮어쓴 뒤 인자 없이 ./convert.ps1 실행하면 됨.
 param(
-  [string]$Src = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\등급수불 및 에이징 raw_2605까지.xlsx",
+  [string]$Src = "C:\Users\USER\Desktop\이은지\1. 업무\2. CRM\2. 기존고객\3. VIP\8. DAUMAU 개선\등급수불_에이징_raw_최신.xlsx",
   [string]$AgingSrc = ""
 )
 if(-not $AgingSrc){ $AgingSrc = $Src }   # 통합 파일이면 같은 파일에서 에이징 추출
