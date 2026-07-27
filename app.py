@@ -585,6 +585,26 @@ def render_integrated():
         fig.update_layout(legend_title="에이징", yaxis_title="1인당 DAU(일 방문율)")
         plot(fig, height=340)
         st.caption("1인당 DAU=DAU/인원. 장기유지도 우하향 = 충성층이 예전만큼 자주 안 옴.")
+    # ③ MAU율(구매기반) vs DAU율 vs Stickiness — '월방문은 버티는데 일방문만 빠진다'
+    st.markdown("**③ 월방문(MAU) vs 일방문(DAU) vs 방문밀도(Stickiness)**")
+    va = ard.groupby(["YM", "LABEL"], as_index=False)[["유효회원수", "MAU", "DAU"]].sum()
+    va = va.sort_values("YM")
+    va["MAU율"] = va["MAU"] / va["유효회원수"]
+    va["DAU율"] = va["DAU"] / va["유효회원수"]
+    va["Stickiness"] = va["DAU"] / va["MAU"].where(va["MAU"] != 0)
+    fig = go.Figure()
+    fig.add_scatter(x=va["LABEL"], y=va["MAU율"], name="MAU율 (월방문·구매기반)",
+                    mode="lines+markers", line=dict(color="#27AE60", width=2.5))
+    fig.add_scatter(x=va["LABEL"], y=va["DAU율"], name="DAU율 (일방문)",
+                    mode="lines+markers", line=dict(color="#2C5F8A", width=2.5))
+    fig.add_scatter(x=va["LABEL"], y=va["Stickiness"], name="Stickiness (DAU/MAU)",
+                    mode="lines+markers", line=dict(color="#E67E22", width=2, dash="dot"))
+    fig.update_yaxes(tickformat=".0%")
+    fig.update_layout(legend_title="", yaxis_title="비율")
+    plot(fig, height=340)
+    st.caption("등급(구매)이 떠받치는 MAU율은 ~70%로 상대적으로 버티는데, "
+               "일방문(DAU율)·방문밀도(Stickiness)는 우하향 = '구매하러는 와도 평소엔 덜 온다'. "
+               "→ 등급수불(구매)은 MAU를 방어할 뿐, DAU는 별도(비구매 방문 습관) 문제.")
     _lg = ard[ard.AGING == "장기 유지(13M~)"].groupby("YM")[["DAU", "유효회원수"]].sum()
     _lt = (_lg["DAU"] / _lg["유효회원수"]).sort_index()
     _td = ard.groupby("YM")["DAU"].sum().sort_index()
