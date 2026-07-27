@@ -716,6 +716,50 @@ def render_integrated():
     st.caption("①②=신규 확보·정착(VIP 순증 레버) · ③=하락 방어 · ④=DAU 회복(재활성화). "
                "순증(수불)과 DAU(활동성)는 다른 문제 — ④가 DAU 역신장의 직접 레버입니다.")
 
+    # ── 운영 모델 ──
+    st.markdown("##### 🛠 운영 모델 — 두 레버를 어떻게 굴릴까")
+    st.markdown(
+        '<div class="insight">대원칙: <b>목표·시간축·KPI를 분리해 병행</b>. 지금은 12주 연속 '
+        '급락 국면이라 <b>단기 리소스는 지혈(레버1)에 집중</b>, 신규(레버2)는 동시 착수하되 '
+        '분기 성과로 본다. (등급 혜택=구매 유도만 밀면 MAU만 오르고 DAU는 안 오름 → 방문 '
+        '자체를 보상)</div>', unsafe_allow_html=True)
+    _op = [
+        ("시급도", "지금 (급성 지혈, 4~8주 내 반응)", "동시 착수 · 분기 성과"),
+        ("리소스", "집중 (단기 스프린트)", "상시 파이프라인"),
+        ("주관", "CRM · 앱 콘텐츠", "등급 · 프로모션 기획"),
+        ("핵심 액션", "방문 트리거: 핫딜·콘텐츠·출석/열람 리워드",
+         "PP 상위 승급 넛지 + 신규 웰컴·온보딩 저니"),
+        ("타겟", "방문빈도 꺾인 장기유지(휴면 전조)", "일반 PP 상위 + 신규 VIP 0~5M"),
+        ("KPI", "주간 DAU · Stickiness(DAU/MAU)", "일반→VIP 전환율 · 신규 3M 잔존"),
+    ]
+    _oprows = "".join(
+        f"<tr><td class='seg'>{k}</td><td>{a}</td><td>{b}</td></tr>"
+        for k, a, b in _op)
+    st.markdown(
+        "<table class='atbl'><thead><tr><th>구분</th>"
+        "<th>레버1 · 장기유지 재참여 <span style='color:#7FB3E0'>(DAU 지혈)</span></th>"
+        "<th>레버2 · 신규 확보+정착 <span style='color:#7FB3E0'>(순증 기반)</span></th>"
+        f"</tr></thead><tbody>{_oprows}</tbody></table>", unsafe_allow_html=True)
+    st.markdown("**90일 로드맵**")
+    ph = st.columns(3)
+    ph[0].markdown(
+        '<div class="ccard now"><span class="t">0~4주 · 지혈</span><ul>'
+        '<li>레버1: 방문빈도 꺾인 장기유지 타겟 <b>재참여 스프린트</b></li>'
+        '<li>레버2: PP 승급 넛지·온보딩 저니 <b>설계</b></li></ul></div>',
+        unsafe_allow_html=True)
+    ph[1].markdown(
+        '<div class="ccard why"><span class="t">4~8주 · 확산</span><ul>'
+        '<li>레버1: <b>반응 세그먼트 스케일</b>·채널 최적화</li>'
+        '<li>레버2: 온보딩 저니 <b>런칭</b>, PP 프로모션 가동</li></ul></div>',
+        unsafe_allow_html=True)
+    ph[2].markdown(
+        '<div class="ccard risk"><span class="t">8~12주 · 검증</span><ul>'
+        '<li>DAU·Stickiness <b>반등 확인</b> → 스케일/조정</li>'
+        '<li>전환율·신규 잔존 초기 성과 점검</li></ul></div>',
+        unsafe_allow_html=True)
+    st.caption("요약: 레버1로 급한 불(하락)을 끄고, 레버2로 불씨(신규 유입·정착)를 다시 "
+               "만든다 — 대체가 아니라 시간축이 다른 보완재.")
+
 
 st.title("📊 VIP 등급 수불 대시보드")
 st.caption(f"기간 {ymlab(ym0)} ~ {ymlab(ym1)} · 모든 수치는 RAW에서 직접 산출 "
