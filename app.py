@@ -574,7 +574,7 @@ def render_integrated():
         plot(fig, height=340)
         st.caption("막대 높이=VIP 총 DAU. 장기유지(남색)가 대부분인데 총량은 우하향.")
     with d2:
-        st.markdown("**② 구간별 1인당 DAU(방문빈도) 추세**")
+        st.markdown("**② 구간별 방문빈도 (일 방문율 = DAU ÷ 인원)**")
         pc = ard.groupby(["YM", "LABEL", "AGING"],
                          as_index=False)[["DAU", "유효회원수"]].sum()
         pc["percap"] = pc["DAU"] / pc["유효회원수"].where(pc["유효회원수"] != 0)
@@ -582,9 +582,10 @@ def render_integrated():
                       markers=True, category_orders={"AGING": AGING_ORDER},
                       color_discrete_map=AGING_COLOR)
         fig.update_yaxes(tickformat=".0%")
-        fig.update_layout(legend_title="에이징", yaxis_title="1인당 DAU(일 방문율)")
+        fig.update_layout(legend_title="에이징", yaxis_title="일 방문율(DAU÷인원)")
         plot(fig, height=340)
-        st.caption("1인당 DAU=DAU/인원. 장기유지도 우하향 = 충성층이 예전만큼 자주 안 옴.")
+        st.caption("일 방문율 = 그 구간 인원 100명 중 하루 평균 몇 명 접속하나(방문빈도). "
+                   "장기유지(검은선)도 우하향 = 충성층이 예전만큼 자주 안 옴.")
     # ③ MAU율(구매기반) vs DAU율 vs Stickiness — '월방문은 버티는데 일방문만 빠진다'
     st.markdown("**③ 월방문(MAU) vs 일방문(DAU) vs 방문밀도(Stickiness)**")
     va = ard.groupby(["YM", "LABEL"], as_index=False)[["유효회원수", "MAU", "DAU"]].sum()
@@ -611,7 +612,7 @@ def render_integrated():
     insight(
         f"🔎 <b>역설 해소</b> — VIP DAU는 {_td.iloc[0]:,.0f} → {_td.iloc[-1]:,.0f}명으로 "
         "<b>역신장</b>인데 충성층 머릿수는 오히려 늘었습니다. 이유는 "
-        f"<b>장기유지의 1인당 방문빈도가 {_lt.iloc[0]*100:.0f}% → {_lt.iloc[-1]*100:.0f}%로 "
+        f"<b>장기유지의 방문빈도(일 방문율)가 {_lt.iloc[0]*100:.0f}% → {_lt.iloc[-1]*100:.0f}%로 "
         "하락</b>(등급은 유지해도 방문은 식는 '활동성 노화'). 즉 <b>DAU는 머릿수가 아니라 "
         "방문빈도의 문제</b>이고, 활발한 신규유입 DAU까지 줄어(유입 병목) 이중으로 빠집니다.",
         "warn")
@@ -679,7 +680,7 @@ def render_integrated():
         '<div class="ccard now"><span class="t">현상 What</span><ul>'
         '<li>VIP 풀 <b>~62k 정체</b> (순증 ≈ 0)</li>'
         '<li>장기유지 비중 <b>57%→62% ↑</b>인데</li>'
-        '<li>VIP <b>DAU 역신장</b> · 1인당 방문빈도 ↓</li></ul></div>',
+        '<li>VIP <b>DAU 역신장</b> · 방문빈도(일 방문율) ↓</li></ul></div>',
         unsafe_allow_html=True)
     cc[1].markdown(
         '<div class="ccard why"><span class="t">원인 Why</span><ul>'
