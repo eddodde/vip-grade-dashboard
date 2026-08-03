@@ -881,24 +881,25 @@ def render_report():
             "풀 6만 내외 정체(2025 감소 후 2026 상반기 보합) · <b>자력 성장 한계</b>, "
             "외부 유입 필요")
 
-    # 3. 유입 병목
+    # 3. 유입 병목 (전환율·대사비중은 0.2% vs 99.8%로 500배 차 → 이중축)
     section("3 │ 유입 병목 — 일반→VIP 전환 저조", anchor="rpt-conv")
     cd = rng(conv).sort_values("YM")
-    cl = pd.melt(cd, id_vars=["LABEL"], value_vars=["대사비중", "전환율"],
-                 var_name="구분", value_name="비율")
-    cl["구분"] = cl["구분"].map({"대사비중": "일반 내부 순환(대사)",
-                                "전환율": "일반→VIP 전환"})
-    fig = px.bar(cl, x="LABEL", y="비율", color="구분",
-                 color_discrete_map={"일반 내부 순환(대사)": "#C7CED8",
-                                     "일반→VIP 전환": "#27AE60"},
-                 category_orders={"구분": ["일반 내부 순환(대사)", "일반→VIP 전환"]})
-    fig.update_layout(barmode="stack", legend_title="",
-                      yaxis_title="전월 일반 유효회원 대비")
-    fig.update_yaxes(tickformat=".0%")
-    plot(fig, height=290)
+    fig = go.Figure()
+    fig.add_bar(x=cd["LABEL"], y=cd["전환율"], name="일반→VIP 전환율(좌)",
+                marker_color="#27AE60")
+    fig.add_scatter(x=cd["LABEL"], y=cd["대사비중"], name="일반 내부 대사비중(우)",
+                    mode="lines+markers", line=dict(color="#C0392B", width=2))
+    fig.update_layout(
+        yaxis=dict(title="전환율", tickformat=".2%"),
+        yaxis2=dict(title="대사비중", overlaying="y", side="right",
+                    tickformat=".0%", range=[0.95, 1.0], showgrid=False),
+        legend=dict(orientation="h", y=1.12))
+    # 대사비중을 오른쪽 축에 연결
+    fig.data[1].update(yaxis="y2")
+    plot(fig, height=290, legend=False)
     insight(f"<b>핵심</b> · 일반 고객의 <b>약 {conv['대사비중'].mean()*100:.1f}%가 "
-            "RD·PP 내부에서만 순환</b>(회색), VIP로 올라오는 전환율은 평균 "
-            f"<b>{conv['전환율'].mean()*100:.2f}%</b>(초록 얇은 띠)에 불과 · "
+            "RD·PP 내부에서만 순환</b>(빨강선, 우축), VIP로 올라오는 전환율은 평균 "
+            f"<b>{conv['전환율'].mean()*100:.2f}%</b>(초록막대, 좌축)에 불과 · "
             "<b>신규 유입 병목 = 순증 부재의 핵심 원인</b>")
 
     # 4. 고령화
