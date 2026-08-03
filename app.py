@@ -877,20 +877,30 @@ def render_report():
                       yaxis2=dict(title="풀(명)", overlaying="y", side="right",
                                   showgrid=False, tickformat=",d"))
     plot(fig, height=300)
-    insight("<b>소견</b> · 승급·하락 이동은 활발하나 상쇄되어 <b>순증 미발생</b> · "
+    insight("<b>핵심</b> · 승급·하락 이동은 활발하나 상쇄되어 <b>순증 미발생</b> · "
             "풀 6만 내외 정체(2025 감소 후 2026 상반기 보합) · <b>자력 성장 한계</b>, "
             "외부 유입 필요")
 
     # 3. 유입 병목
     section("3 │ 유입 병목 — 일반→VIP 전환 저조", anchor="rpt-conv")
-    cd = rng(conv).sort_values("YM")
-    fig = px.line(cd, x="LABEL", y="전환율", markers=True)
-    fig.update_traces(line_color="#27AE60")
-    fig.update_yaxes(tickformat=".2%")
-    fig.update_layout(yaxis_title="일반→VIP 전환율")
+    c2v = mat[mat.FROM.isin(NORMAL) & mat.TO.isin(VIP_ALL)]
+    c2v = c2v[(c2v.YM >= ym0) & (c2v.YM <= ym1)]
+    by = c2v.groupby(["YM", "LABEL", "FROM"], as_index=False)["CNT"].sum()
+    by["출처"] = by["FROM"].map({"PP": "PP(일반 상위)", "RD": "RD(일반 하위)"})
+    fig = px.bar(by.sort_values("YM"), x="LABEL", y="CNT", color="출처",
+                 color_discrete_map={"PP(일반 상위)": "#8E44AD",
+                                     "RD(일반 하위)": "#C7A4D6"},
+                 category_orders={"출처": ["PP(일반 상위)", "RD(일반 하위)"]})
+    fig.update_layout(barmode="stack", legend_title="", yaxis_title="일반→VIP 전환 인원")
+    fig.update_yaxes(tickformat=",d")
     plot(fig, height=280)
-    insight(f"<b>소견</b> · 일반→VIP 전환율 <b>{conv['전환율'].mean()*100:.2f}% 수준</b> · "
-            "일반 약 99%가 RD·PP 내부 순환 · <b>신규 유입 병목 = 순증 부재의 핵심 원인</b>")
+    _pp = by[by["FROM"] == "PP"]["CNT"].sum()
+    _rd = by[by["FROM"] == "RD"]["CNT"].sum()
+    _ppsh = _pp / (_pp + _rd) if (_pp + _rd) else 0
+    insight(f"<b>핵심</b> · 일반→VIP 전환율 평균 <b>{conv['전환율'].mean()*100:.2f}%</b>"
+            "(일반 약 99.9%가 RD·PP 내부 순환) · "
+            f"전환 인원의 <b>{_ppsh*100:.0f}%가 PP(일반 상위) 출처</b> → "
+            "<b>PP 상위 겨냥 승급 부스팅이 핵심 레버</b>")
 
     # 4. 고령화
     section("4 │ 구성 — 신규 축소·충성층 편중(고령화)", anchor="rpt-aging")
@@ -909,7 +919,7 @@ def render_report():
     fig.update_yaxes(tickformat=".0%")
     fig.update_layout(yaxis_title="구성 비중")
     plot(fig, height=280)
-    insight("<b>소견</b> · 장기유지 비중 상승·신규유입 비중 축소 = <b>고령화</b> · "
+    insight("<b>핵심</b> · 장기유지 비중 상승·신규유입 비중 축소 = <b>고령화</b> · "
             "충성층이 풀 지탱하나 신규 수혈 감소 · <b>충성층 이탈 시 붕괴 위험(구조적 취약)</b>")
 
     # 5. DAU 역설
@@ -923,7 +933,7 @@ def render_report():
     fig.update_yaxes(tickformat=".0%")
     fig.update_layout(legend_title="에이징", yaxis_title="일 방문율(DAU÷인원)")
     plot(fig, height=300)
-    insight("<b>소견</b> · 충성층(장기유지) 방문빈도 하락이 DAU 역신장 주도 · "
+    insight("<b>핵심</b> · 충성층(장기유지) 방문빈도 하락이 DAU 역신장 주도 · "
             "<b>DAU는 등급(머릿수)이 아닌 방문빈도(활동성) 문제</b> · "
             "등급 관리만으로 DAU 회복 불가")
 
