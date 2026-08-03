@@ -883,24 +883,23 @@ def render_report():
 
     # 3. 유입 병목
     section("3 │ 유입 병목 — 일반→VIP 전환 저조", anchor="rpt-conv")
-    c2v = mat[mat.FROM.isin(NORMAL) & mat.TO.isin(VIP_ALL)]
-    c2v = c2v[(c2v.YM >= ym0) & (c2v.YM <= ym1)]
-    by = c2v.groupby(["YM", "LABEL", "FROM"], as_index=False)["CNT"].sum()
-    by["출처"] = by["FROM"].map({"PP": "PP(일반 상위)", "RD": "RD(일반 하위)"})
-    fig = px.bar(by.sort_values("YM"), x="LABEL", y="CNT", color="출처",
-                 color_discrete_map={"PP(일반 상위)": "#8E44AD",
-                                     "RD(일반 하위)": "#C7A4D6"},
-                 category_orders={"출처": ["PP(일반 상위)", "RD(일반 하위)"]})
-    fig.update_layout(barmode="stack", legend_title="", yaxis_title="일반→VIP 전환 인원")
-    fig.update_yaxes(tickformat=",d")
-    plot(fig, height=280)
-    _pp = by[by["FROM"] == "PP"]["CNT"].sum()
-    _rd = by[by["FROM"] == "RD"]["CNT"].sum()
-    _ppsh = _pp / (_pp + _rd) if (_pp + _rd) else 0
-    insight(f"<b>핵심</b> · 일반→VIP 전환율 평균 <b>{conv['전환율'].mean()*100:.2f}%</b>"
-            "(일반 약 99.9%가 RD·PP 내부 순환) · "
-            f"전환 인원의 <b>{_ppsh*100:.0f}%가 PP(일반 상위) 출처</b> → "
-            "<b>PP 상위 겨냥 승급 부스팅이 핵심 레버</b>")
+    cd = rng(conv).sort_values("YM")
+    cl = pd.melt(cd, id_vars=["LABEL"], value_vars=["대사비중", "전환율"],
+                 var_name="구분", value_name="비율")
+    cl["구분"] = cl["구분"].map({"대사비중": "일반 내부 순환(대사)",
+                                "전환율": "일반→VIP 전환"})
+    fig = px.bar(cl, x="LABEL", y="비율", color="구분",
+                 color_discrete_map={"일반 내부 순환(대사)": "#C7CED8",
+                                     "일반→VIP 전환": "#27AE60"},
+                 category_orders={"구분": ["일반 내부 순환(대사)", "일반→VIP 전환"]})
+    fig.update_layout(barmode="stack", legend_title="",
+                      yaxis_title="전월 일반 유효회원 대비")
+    fig.update_yaxes(tickformat=".0%")
+    plot(fig, height=290)
+    insight(f"<b>핵심</b> · 일반 고객의 <b>약 {conv['대사비중'].mean()*100:.1f}%가 "
+            "RD·PP 내부에서만 순환</b>(회색), VIP로 올라오는 전환율은 평균 "
+            f"<b>{conv['전환율'].mean()*100:.2f}%</b>(초록 얇은 띠)에 불과 · "
+            "<b>신규 유입 병목 = 순증 부재의 핵심 원인</b>")
 
     # 4. 고령화
     section("4 │ 구성 — 신규 축소·충성층 편중(고령화)", anchor="rpt-aging")
