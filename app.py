@@ -41,6 +41,57 @@ AGING_COLOR = {"신규 유입(0~2M)": "#3498DB", "온보딩(3~5M)": "#9B59B6",
                "장기 유지(13M~)": "#2C3E50"}
 DIRCOLOR = {"승급": "#27AE60", "하락": "#E74C3C", "유지": "#95A5A6"}
 
+# VIP 고객 저니 × CRM 캠페인 맵 (통합진단 4번 하단 삽입용)
+JOURNEY_MAP_HTML = """
+<style>
+.jmap{font-family:'Noto Sans KR',sans-serif;margin:6px 0 2px}
+.jmap .lane{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+.jmap .stage{flex:1 1 150px;min-width:150px;background:#fff;border:1px solid #e7ebf2;
+  border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:5px;position:relative}
+.jmap .stage:not(:last-child)::after{content:"\\203A";position:absolute;right:-10px;top:50%;
+  transform:translateY(-50%);color:#c3cad6;font-size:16px}
+.jmap .tag{font-size:10.5px;font-weight:700;color:#9aa3b2}
+.jmap .nm{font-size:15px;font-weight:800;color:#1a2236;line-height:1.1}
+.jmap .st{font-size:11.5px;color:#66707f;line-height:1.4;min-height:32px;margin-bottom:3px}
+.jmap .chip{font-size:11px;font-weight:600;line-height:1.35;padding:5px 8px;border-radius:7px;
+  display:block;margin-top:2px}
+.jmap .live{background:#f0f2f5;color:#66707f}
+.jmap .gap{background:#fdeecf;color:#9a6a00;border:1px solid rgba(230,126,34,.35);font-weight:700}
+.jmap .up{background:#eef3f9;color:#2C5F8A}
+.jmap .legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 2px;font-size:12px;color:#66707f}
+.jmap .legend span{display:flex;align-items:center;gap:6px}
+.jmap .legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.jmap .i-live{background:#9aa3b2}.jmap .i-gap{background:#e67e22}.jmap .i-up{background:#2C5F8A}
+</style>
+<div class="jmap"><div class="lane">
+  <div class="stage"><div class="tag">PP·RD 상위</div><div class="nm">유치</div>
+    <div class="st">VIP 승급 문턱 근접</div>
+    <span class="chip live">&#10003; 승급유도 BK·SV·GD가망</span></div>
+  <div class="stage"><div class="tag">0~2M</div><div class="nm">신규 진입</div>
+    <div class="st">진입 직후, 습관 미형성</div>
+    <span class="chip gap">&#9733; 승급 축하·온보딩 저니</span></div>
+  <div class="stage"><div class="tag">온보딩·안정화 · 3~11M</div><div class="nm">정착</div>
+    <div class="st">방문빈도 최저(16~17%)</div>
+    <span class="chip gap">&#9733; 방문습관 트리거(관심브랜드 핫딜)</span></div>
+  <div class="stage"><div class="tag">12M</div><div class="nm">갱신</div>
+    <div class="st">재구매 없으면 등급 하락</div>
+    <span class="chip gap">&#9733; D-30 등급 방어·재구매</span></div>
+  <div class="stage"><div class="tag">13M+</div><div class="nm">유지·충성</div>
+    <div class="st">많지만 방문빈도&#8595; = DAU 역신장</div>
+    <span class="chip live">&#10003; 쿠폰 미사용</span>
+    <span class="chip up">&#9670; 재참여 정밀화 + PUSH</span></div>
+  <div class="stage"><div class="tag">미방문·휴면</div><div class="nm">재활성화</div>
+    <div class="st">뜸해진 고객 되살리기</div>
+    <span class="chip live">&#10003; 30일 미방문 재방문</span>
+    <span class="chip up">&#9670; 재구매주기 이탈방어</span></div>
+</div>
+<div class="legend">
+  <span><i class="i-live"></i>&#10003; 운영 중</span>
+  <span><i class="i-gap"></i>&#9733; 최우선(지금 공백)</span>
+  <span><i class="i-up"></i>&#9670; 다음(고도화)</span>
+</div></div>
+"""
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
@@ -760,6 +811,12 @@ def render_integrated():
         unsafe_allow_html=True)
     st.caption("요약: 레버1로 단기 하락을 먼저 멈추고, 레버2로 신규 유입·정착 기반을 다시 "
                "쌓는다 — 대체가 아니라 시간축이 다른 보완재.")
+
+    # ── VIP 고객 저니 × CRM 캠페인 맵 ──
+    st.markdown("##### 🗺 VIP 고객 저니 × CRM 캠페인 맵 (지금 무엇을 하나 / 공백은 어디)")
+    st.markdown(JOURNEY_MAP_HTML, unsafe_allow_html=True)
+    st.caption("양 끝(유치·재활성화)은 운영 중인데 가운데(신규 진입→정착→갱신)가 공백 — "
+               "올려도 정착 못 하고 12M에 새어나감. ★ 이 구간을 먼저 메워야 순증·DAU로 남음.")
 
 
 st.title("📊 VIP 등급 수불 대시보드")
