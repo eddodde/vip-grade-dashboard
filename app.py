@@ -349,6 +349,15 @@ mat, sticky, actdir, YMS = B["mat"], B["sticky"], B["actdir"], B["yms"]
 aging = B["aging"]
 
 PAGES = {
+    "📋 실적 보고": [
+        ("rpt-cur", "1 · 현황 요약"),
+        ("rpt-flow", "2 · 수불(풀 정체)"),
+        ("rpt-conv", "3 · 유입 병목"),
+        ("rpt-aging", "4 · 고령화"),
+        ("rpt-dau", "5 · DAU 역설"),
+        ("rpt-diag", "6 · 종합 진단"),
+        ("rpt-act", "7 · 실행 방향"),
+    ],
     "📊 수불 현황": [
         ("sec-summary", "1 · 현황 한눈에"),
         ("sec-flow", "2 · 이동은 활발한가(승급·유지·하락)"),
@@ -824,6 +833,130 @@ def render_integrated():
                "→ 올려도 정착 못 하고 12M에 새어나가는 구조라, ★ 가운데를 먼저 메워야 순증·DAU로 남음.")
 
 
+def render_report():
+    # ── 보고용(개조식) ──
+    st.markdown('<div class="headline">VIP 현황 진단 및 CRM 실행 방향</div>',
+                unsafe_allow_html=True)
+    st.caption(f"대상: 온라인 활성 VIP(제휴제외) · 기간 {ymlab(ym0)}~{ymlab(ym1)} · "
+               "모든 수치 RAW 직접 산출")
+    insight(
+        "<b>Executive Summary</b><br>"
+        "· VIP 풀 정체(순증 0 수준), VIP DAU 역신장 지속<br>"
+        "· 원인 = 신규 유입 병목 + 정착 실패 + 충성층 활동성 저하(3중)<br>"
+        "· 방향 = <b>단기</b> 충성층 재참여(DAU 회복) + <b>중장기</b> 신규 확보·정착(순증)")
+
+    # 1. 현황
+    section("1 │ 현황 요약", anchor="rpt-cur")
+    vpf = (gm[gm.GRADE.isin(VIP_ALL)].groupby(["YM", "LABEL"], as_index=False)
+           ["당월유효"].sum().sort_values("YM"))
+    vpf["순증"] = vpf["당월유효"].diff()
+    vp = rng(vpf)
+    cL = conv[conv.YM == ym1]
+    arL = aging[aging.YM == ym1]
+    _agtot = arL["유효회원수"].sum()
+    _long = (arL[arL.AGING == "장기 유지(13M~)"]["유효회원수"].sum() / _agtot
+             if _agtot else 0)
+    _dau = arL["DAU"].sum()
+    k = st.columns(4)
+    metric_card(k[0], "VIP 풀(활성)", f"{vp['당월유효'].iloc[-1]:,.0f}명",
+                f"기간 {vp['당월유효'].iloc[-1]-vp['당월유효'].iloc[0]:+,.0f} · 정체")
+    metric_card(k[1], "일반→VIP 전환율",
+                f"{cL['전환율'].iloc[0]*100:.2f}%" if len(cL) else "—", "유입 병목")
+    metric_card(k[2], "장기유지 비중", f"{_long*100:.0f}%", "고령화(충성층 편중)")
+    metric_card(k[3], "VIP DAU", f"{_dau:,.0f}명", "역신장 지속")
+
+    # 2. 수불 — 풀 정체
+    section("2 │ 수불 — 이동은 활발하나 풀은 정체", anchor="rpt-flow")
+    bc = ["#C0392B" if v < 0 else "#2C5F8A" for v in vp["순증"].fillna(0)]
+    fig = go.Figure()
+    fig.add_bar(x=vp["LABEL"], y=vp["순증"], name="월 순증", marker_color=bc)
+    fig.add_scatter(x=vp["LABEL"], y=vp["당월유효"], name="VIP 풀(활성)",
+                    mode="lines+markers", line=dict(color="#E67E22", width=2.5),
+                    yaxis="y2")
+    fig.update_layout(yaxis=dict(title="월 순증(명)", tickformat=",d", zeroline=True),
+                      yaxis2=dict(title="풀(명)", overlaying="y", side="right",
+                                  showgrid=False, tickformat=",d"))
+    plot(fig, height=300)
+    insight("<b>소견</b> · 승급·하락 이동은 활발하나 상쇄되어 <b>순증 미발생</b> · "
+            "풀 6만 내외 정체(2025 감소 후 2026 상반기 보합) · <b>자력 성장 한계</b>, "
+            "외부 유입 필요")
+
+    # 3. 유입 병목
+    section("3 │ 유입 병목 — 일반→VIP 전환 저조", anchor="rpt-conv")
+    cd = rng(conv).sort_values("YM")
+    fig = px.line(cd, x="LABEL", y="전환율", markers=True)
+    fig.update_traces(line_color="#27AE60")
+    fig.update_yaxes(tickformat=".2%")
+    fig.update_layout(yaxis_title="일반→VIP 전환율")
+    plot(fig, height=280)
+    insight(f"<b>소견</b> · 일반→VIP 전환율 <b>{conv['전환율'].mean()*100:.2f}% 수준</b> · "
+            "일반 약 99%가 RD·PP 내부 순환 · <b>신규 유입 병목 = 순증 부재의 핵심 원인</b>")
+
+    # 4. 고령화
+    section("4 │ 구성 — 신규 축소·충성층 편중(고령화)", anchor="rpt-aging")
+    ar = rng(aging)
+    _tt = ar.groupby("YM")["유효회원수"].sum()
+    mm = pd.DataFrame({"YM": sorted(ar["YM"].unique())})
+    mm["LABEL"] = mm["YM"].map(ymlab)
+    for nm, bk in [("장기유지", "장기 유지(13M~)"), ("신규유입", "신규 유입(0~2M)")]:
+        s = ar[ar.AGING == bk].groupby("YM")["유효회원수"].sum() / _tt
+        mm[nm] = mm["YM"].map(s)
+    fig = go.Figure()
+    fig.add_scatter(x=mm["LABEL"], y=mm["장기유지"], name="장기유지 비중",
+                    mode="lines+markers", line=dict(color="#2C3E50", width=2.5))
+    fig.add_scatter(x=mm["LABEL"], y=mm["신규유입"], name="신규유입 비중",
+                    mode="lines+markers", line=dict(color="#3498DB", width=2.5))
+    fig.update_yaxes(tickformat=".0%")
+    fig.update_layout(yaxis_title="구성 비중")
+    plot(fig, height=280)
+    insight("<b>소견</b> · 장기유지 비중 상승·신규유입 비중 축소 = <b>고령화</b> · "
+            "충성층이 풀 지탱하나 신규 수혈 감소 · <b>충성층 이탈 시 붕괴 위험(구조적 취약)</b>")
+
+    # 5. DAU 역설
+    section("5 │ 활동성 — 충성층 방문빈도 하락(DAU 역설)", anchor="rpt-dau")
+    pc = ar.groupby(["YM", "LABEL", "AGING"],
+                    as_index=False)[["DAU", "유효회원수"]].sum()
+    pc["v"] = pc["DAU"] / pc["유효회원수"].where(pc["유효회원수"] != 0)
+    fig = px.line(pc.sort_values("YM"), x="LABEL", y="v", color="AGING",
+                  markers=True, category_orders={"AGING": AGING_ORDER},
+                  color_discrete_map=AGING_COLOR)
+    fig.update_yaxes(tickformat=".0%")
+    fig.update_layout(legend_title="에이징", yaxis_title="일 방문율(DAU÷인원)")
+    plot(fig, height=300)
+    insight("<b>소견</b> · 충성층(장기유지) 방문빈도 하락이 DAU 역신장 주도 · "
+            "<b>DAU는 등급(머릿수)이 아닌 방문빈도(활동성) 문제</b> · "
+            "등급 관리만으로 DAU 회복 불가")
+
+    # 6. 종합 진단
+    section("6 │ 종합 진단", anchor="rpt-diag")
+    cc = st.columns(3)
+    cc[0].markdown(
+        '<div class="ccard now"><span class="t">상태</span><ul>'
+        '<li>VIP 풀 <b>정체</b>(순증 0)</li><li>DAU <b>역신장</b> 지속</li>'
+        '<li>구성 <b>고령화</b></li></ul></div>', unsafe_allow_html=True)
+    cc[1].markdown(
+        '<div class="ccard why"><span class="t">근본 원인</span><ul>'
+        '<li>신규 유입 <b>병목</b></li><li>신규 VIP <b>정착 실패</b></li>'
+        '<li>충성층 <b>활동성 저하</b></li></ul></div>', unsafe_allow_html=True)
+    cc[2].markdown(
+        '<div class="ccard risk"><span class="t">시사점</span><ul>'
+        '<li>등급 관리 ≠ DAU 회복</li><li>충성층 노쇠 시 <b>급감 위험</b></li>'
+        '<li>정착·방어 <b>공백 시급</b></li></ul></div>', unsafe_allow_html=True)
+
+    # 7. 실행 방향
+    section("7 │ 실행 방향 (CRM)", anchor="rpt-act")
+    st.markdown(
+        '<div class="insight"><b>2대 레버 (시간축 분리 병행)</b><br>'
+        '· <b>단기</b> — 충성층 재참여(방문 트리거·PUSH) → DAU 회복(즉효, 규모 큼)<br>'
+        '· <b>중장기</b> — 신규 확보(PP 승급 넛지) + 온보딩 정착 → 순증 기반<br>'
+        '· 공통 전제 — 등급/구매 아닌 <b>방문할 이유(오퍼·콘텐츠)</b> 필요</div>',
+        unsafe_allow_html=True)
+    st.markdown("**고객 여정 위에서 본 CRM 액션 (운영 현황·공백)**")
+    st.markdown(JOURNEY_MAP_HTML, unsafe_allow_html=True)
+    st.caption("운영 중: 승급유도·미방문·쿠폰(양 끝) · 공백(★): 신규진입·정착·갱신(가운데). "
+               "→ 정착·갱신 방어 신규 구축이 순증·DAU 회복의 선결 과제")
+
+
 st.title("📊 VIP 등급 수불 대시보드")
 st.caption(f"기간 {ymlab(ym0)} ~ {ymlab(ym1)} · 모든 수치는 RAW에서 직접 산출 "
            "(유입+유지 단일기입 전이모델)")
@@ -835,6 +968,9 @@ PAGE_INTRO = {
     "🔗 통합 진단": "<b>수불(왜 변하나)</b> 과 <b>에이징(풀의 질·나이)</b> 을 합쳐 봅니다. "
     "각각 따로는 안 보이는 '풀 정체의 진짜 이유'를 진단합니다.",
 }
+if page.startswith("📋"):           # 실적 보고 → 자체 요약 보유, 렌더 후 종료
+    render_report()
+    st.stop()
 insight(PAGE_INTRO[page])
 
 if page.startswith("⏳"):           # 에이징 페이지 → 렌더 후 종료
