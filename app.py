@@ -857,29 +857,32 @@ def render_report():
     _long = (arL[arL.AGING == "장기 유지(13M~)"]["유효회원수"].sum() / _agtot
              if _agtot else 0)
     _dau = arL["DAU"].sum()
+    _navg = rng(conv)["VIP순증"].mean()   # 일반↔VIP 순증(2번 차트와 동일 기준)
     k = st.columns(4)
     metric_card(k[0], "VIP 풀(활성)", f"{vp['당월유효'].iloc[-1]:,.0f}명",
-                f"기간 {vp['당월유효'].iloc[-1]-vp['당월유효'].iloc[0]:+,.0f} · 정체")
+                f"월 순증 평균 {_navg:+,.0f}명 ≈ 정체 (근거: 2번)")
     metric_card(k[1], "일반→VIP 전환율",
                 f"{cL['전환율'].iloc[0]*100:.2f}%" if len(cL) else "—", "유입 병목")
     metric_card(k[2], "장기유지 비중", f"{_long*100:.0f}%", "고령화(충성층 편중)")
     metric_card(k[3], "VIP DAU", f"{_dau:,.0f}명", "역신장 지속")
 
-    # 2. 수불 — 풀 정체
-    section("2 │ 수불 — 이동은 활발하나 풀은 정체", anchor="rpt-flow")
-    bc = ["#C0392B" if v < 0 else "#2C5F8A" for v in vp["순증"].fillna(0)]
+    # 2. 수불 — 풀 정체 (유입=승급으로 VIP 진입 / 이탈=하락으로 VIP 이탈)
+    section("2 │ 수불 — 들어온 만큼 빠져 순증 0", anchor="rpt-flow")
+    cf = rng(conv).sort_values("YM")
     fig = go.Figure()
-    fig.add_bar(x=vp["LABEL"], y=vp["순증"], name="월 순증", marker_color=bc)
-    fig.add_scatter(x=vp["LABEL"], y=vp["당월유효"], name="VIP 풀(활성)",
-                    mode="lines+markers", line=dict(color="#E67E22", width=2.5),
-                    yaxis="y2")
-    fig.update_layout(yaxis=dict(title="월 순증(명)", tickformat=",d", zeroline=True),
-                      yaxis2=dict(title="풀(명)", overlaying="y", side="right",
-                                  showgrid=False, tickformat=",d"))
+    fig.add_bar(x=cf["LABEL"], y=cf["일반→VIP"], name="유입 (일반→VIP 승급)",
+                marker_color="#27AE60")
+    fig.add_bar(x=cf["LABEL"], y=-cf["VIP→일반"], name="이탈 (VIP→일반 하락)",
+                marker_color="#E74C3C")
+    fig.add_scatter(x=cf["LABEL"], y=cf["VIP순증"], name="순증 (유입−이탈)",
+                    mode="lines+markers", line=dict(color="#1a2236", width=2.5))
+    fig.update_layout(barmode="relative",
+                      yaxis=dict(title="명 (위=유입/아래=이탈)", tickformat=",d",
+                                 zeroline=True, zerolinecolor="#bbb"))
     plot(fig, height=300)
-    insight("<b>핵심</b> · 승급·하락 이동은 활발하나 상쇄되어 <b>순증 미발생</b> · "
-            "풀 6만 내외 정체(2025 감소 후 2026 상반기 보합) · <b>자력 성장 한계</b>, "
-            "외부 유입 필요")
+    insight("<b>핵심</b> · 매월 <b>유입(일반→VIP 승급) ≈ 이탈(VIP→일반 하락)</b>으로 맞물려 "
+            "<b>순증이 0 수준</b>(검은 선이 0에 붙음) · 내부 오르내림이 상쇄돼 풀 정체 · "
+            "<b>외부 유입 강화 없이는 성장 불가</b>")
 
     # 3. 유입 병목 (전환율·대사비중은 0.2% vs 99.8%로 500배 차 → 이중축)
     section("3 │ 유입 병목 — 일반→VIP 전환 저조", anchor="rpt-conv")
@@ -897,33 +900,40 @@ def render_report():
     # 대사비중을 오른쪽 축에 연결
     fig.data[1].update(yaxis="y2")
     plot(fig, height=290, legend=False)
+    _c2v = mat[(mat.YM >= ym0) & (mat.YM <= ym1)
+               & mat.FROM.isin(NORMAL) & mat.TO.isin(VIP_ALL)]
+    _pp = _c2v[_c2v.FROM == "PP"]["CNT"].sum()
+    _rd = _c2v[_c2v.FROM == "RD"]["CNT"].sum()
+    _ppsh = _pp / (_pp + _rd) if (_pp + _rd) else 0
     insight(f"<b>핵심</b> · 일반 고객의 <b>약 {conv['대사비중'].mean()*100:.1f}%가 "
-            "RD·PP 내부에서만 순환</b>(빨강선, 우축), VIP로 올라오는 전환율은 평균 "
-            f"<b>{conv['전환율'].mean()*100:.2f}%</b>(초록막대, 좌축)에 불과 · "
-            "<b>신규 유입 병목 = 순증 부재의 핵심 원인</b>")
+            "RD·PP 내부에서만 순환</b>(빨강선), VIP 전환율은 평균 "
+            f"<b>{conv['전환율'].mean()*100:.2f}%</b>(초록막대)에 불과 = 유입 병목.")
+    insight(f"<b>왜 'PP 상위'가 최대 레버인가</b> · 실제 VIP 전환의 <b>{_ppsh*100:.0f}%가 "
+            "PP 출처</b>(나머지는 RD) · PP는 <b>VIP(BK) 바로 아래 등급 = 최단 승급 경로</b>라 "
+            "전환 확률·효율이 가장 높음. RD는 2단계 이상 점프라 비효율 → <b>PP 상위(문턱 "
+            "근접)부터 겨냥</b>이 정석.")
 
-    # 4. 고령화
-    section("4 │ 구성 — 신규 축소·충성층 편중(고령화)", anchor="rpt-aging")
+    # 4. 고령화 — 풀의 '속'(에이징 구성) 100% 누적
+    section("4 │ 구성 — 풀의 속을 보면 고령화", anchor="rpt-aging")
     ar = rng(aging)
-    _tt = ar.groupby("YM")["유효회원수"].sum()
-    mm = pd.DataFrame({"YM": sorted(ar["YM"].unique())})
-    mm["LABEL"] = mm["YM"].map(ymlab)
-    for nm, bk in [("장기유지", "장기 유지(13M~)"), ("신규유입", "신규 유입(0~2M)")]:
-        s = ar[ar.AGING == bk].groupby("YM")["유효회원수"].sum() / _tt
-        mm[nm] = mm["YM"].map(s)
-    fig = go.Figure()
-    fig.add_scatter(x=mm["LABEL"], y=mm["장기유지"], name="장기유지 비중",
-                    mode="lines+markers", line=dict(color="#2C3E50", width=2.5))
-    fig.add_scatter(x=mm["LABEL"], y=mm["신규유입"], name="신규유입 비중",
-                    mode="lines+markers", line=dict(color="#3498DB", width=2.5))
+    comp = ar.groupby(["YM", "LABEL", "AGING"], as_index=False)["유효회원수"].sum()
+    comp["tot"] = comp.groupby("YM")["유효회원수"].transform("sum")
+    comp["share"] = comp["유효회원수"] / comp["tot"].where(comp["tot"] != 0)
+    fig = px.bar(comp.sort_values("YM"), x="LABEL", y="share", color="AGING",
+                 category_orders={"AGING": AGING_ORDER}, color_discrete_map=AGING_COLOR)
+    fig.update_layout(barmode="stack", legend_title="에이징(가입후 경과월)",
+                      yaxis_title="구성 비중")
     fig.update_yaxes(tickformat=".0%")
-    fig.update_layout(yaxis_title="구성 비중")
-    plot(fig, height=280)
-    insight("<b>핵심</b> · 장기유지 비중 상승·신규유입 비중 축소 = <b>고령화</b> · "
-            "충성층이 풀 지탱하나 신규 수혈 감소 · <b>충성층 이탈 시 붕괴 위험(구조적 취약)</b>")
+    plot(fig, height=300)
+    _long0 = comp[comp.AGING == "장기 유지(13M~)"].sort_values("YM")["share"]
+    _new0 = comp[comp.AGING == "신규 유입(0~2M)"].sort_values("YM")["share"]
+    insight(f"<b>핵심</b> · 풀의 구성을 보면 <b>장기유지(남색)가 {_long0.iloc[0]*100:.0f}%"
+            f"→{_long0.iloc[-1]*100:.0f}%로 확대</b>, <b>신규유입(파랑)은 축소</b> = 고령화 · "
+            "충성층이 풀 지탱하나 신규 수혈 감소 · <b>충성층 이탈 시 받쳐줄 신규 부재 = 구조적 "
+            "취약</b>")
 
-    # 5. DAU 역설
-    section("5 │ 활동성 — 충성층 방문빈도 하락(DAU 역설)", anchor="rpt-dau")
+    # 5. DAU 역설 (충성층 머릿수↑인데 DAU↓)
+    section("5 │ 활동성 — 충성층은 느는데 DAU는 하락(역설)", anchor="rpt-dau")
     pc = ar.groupby(["YM", "LABEL", "AGING"],
                     as_index=False)[["DAU", "유효회원수"]].sum()
     pc["v"] = pc["DAU"] / pc["유효회원수"].where(pc["유효회원수"] != 0)
@@ -931,11 +941,14 @@ def render_report():
                   markers=True, category_orders={"AGING": AGING_ORDER},
                   color_discrete_map=AGING_COLOR)
     fig.update_yaxes(tickformat=".0%")
-    fig.update_layout(legend_title="에이징", yaxis_title="일 방문율(DAU÷인원)")
+    fig.update_layout(legend_title="에이징", yaxis_title="방문빈도(1인당 일 방문율)")
     plot(fig, height=300)
-    insight("<b>핵심</b> · 충성층(장기유지) 방문빈도 하락이 DAU 역신장 주도 · "
-            "<b>DAU는 등급(머릿수)이 아닌 방문빈도(활동성) 문제</b> · "
-            "등급 관리만으로 DAU 회복 불가")
+    insight("<b>핵심 — 역설</b> · 충성층(장기유지) <b>머릿수는 늘었는데 VIP DAU는 역신장</b> · "
+            "원인 = 그들의 <b>방문빈도(1인당 일 방문)가 하락</b>(검은선 우하향) · 즉 DAU는 "
+            "'몇 명이 VIP냐(등급)'가 아니라 <b>'얼마나 자주 오냐(방문빈도)'의 문제</b>.")
+    insight("<b>'등급 관리로는 DAU 회복 불가'의 의미</b> · 등급은 구매(=가끔의 방문)로 정해져 "
+            "<b>월 활동(MAU)</b>은 지켜지나, <b>일 방문(DAU)</b>은 '평소 앱을 여는 습관'이라 "
+            "별개 · 따라서 승급·등급 혜택이 아니라 <b>재방문을 만드는 리텐션이 DAU의 레버</b>.")
 
     # 6. 종합 진단
     section("6 │ 종합 진단", anchor="rpt-diag")
@@ -961,6 +974,29 @@ def render_report():
         '· <b>중장기</b> — 신규 확보(PP 승급 넛지) + 온보딩 정착 → 순증 기반<br>'
         '· 공통 전제 — 등급/구매 아닌 <b>방문할 이유(오퍼·콘텐츠)</b> 필요</div>',
         unsafe_allow_html=True)
+    st.markdown("**실행 과제 (구체)**")
+    rpt_acts = [
+        ("단기", "충성층 (방문빈도 하락)",
+         "관심 브랜드 핫딜·콘텐츠를 PUSH로 발송 → 재방문·습관 회복",
+         "DAU 회복(규모 레버)", "운영 고도화"),
+        ("중장기", "신규 VIP 0~5M",
+         "웰컴·온보딩 저니(첫 재방문·혜택 학습)로 정착 유도",
+         "정착률↑ → 순증", "신설 필요"),
+        ("상시", "하락가망 12M",
+         "등급 만료 D-30 리마인드 + 재구매 인센티브(무재구매자 타겟)",
+         "하락 방어", "신설 필요"),
+        ("상시", "일반 PP 상위(문턱 근접)",
+         "승급 넛지 — 최단 경로 세그먼트 우선(진척 알림·프로모션)",
+         "신규 유입↑", "운영 중"),
+    ]
+    _rr = "".join(
+        f"<tr><td class='pri'>{a}</td><td class='seg'>{b}</td><td>{c}</td>"
+        f"<td>{d}</td><td>{e}</td></tr>" for a, b, c, d, e in rpt_acts)
+    st.markdown(
+        "<table class='atbl'><thead><tr><th>시점</th><th>타겟</th><th>CRM 액션</th>"
+        "<th>기대효과</th><th>상태</th></tr></thead>"
+        f"<tbody>{_rr}</tbody></table>", unsafe_allow_html=True)
+    st.caption("★ '신설 필요'(신규 온보딩·하락가망 방어)가 지금 최대 공백 → 우선 구축 과제.")
     st.markdown("**고객 여정 위에서 본 CRM 액션 (운영 현황·공백)**")
     st.markdown(JOURNEY_MAP_HTML, unsafe_allow_html=True)
     st.caption("운영 중: 승급유도·미방문·쿠폰(양 끝) · 공백(★): 신규진입·정착·갱신(가운데). "
